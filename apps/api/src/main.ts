@@ -55,6 +55,10 @@ async function bootstrap() {
 
   await app.register(cors, { origin: true });
 
+  // Root endpoint for Render health checks
+  app.get('/', async () => ({ status: 'ok', name: 'Restaurant OS API', version: '0.1.0' }));
+  app.head('/', async (_req, reply) => reply.status(200).send());
+
   // Resolvers for Auth & Scoper
   const getStaffRoles = async (staffId: string): Promise<StaffRole[]> => {
     const assignments = await prisma.staffRoleAssignment.findMany({

@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Restaurant OS - Dark Glassmorphism Tokens */
+    --background: 240 10% 3%; /* #08080A */
+    --foreground: 0 0% 98%;
+    
+    --surface-1: 240 6% 7%; /* #121214 */
+    --surface-2: 240 5% 12%; /* #1C1C1F */
+    --surface-3: 240 4% 16%; /* #27272A */
+
+    --glass: 0 0% 100% / 0.06;
+    --glass-border: 0 0% 100% / 0.08;
+
+    --border: 240 5% 12%;
+    --input: 240 5% 12%;
+    --ring: 38 90% 56%;
+
+    --text-primary: 0 0% 98%;
+    --text-secondary: 240 5% 64%;
+    --text-tertiary: 240 5% 44%;
+
+    --amber: 38 90% 56%; /* #F5A623 */
+    --amber-hover: 40 100% 68%; /* #FFC857 */
+    --amber-muted: 38 90% 56% / 0.12;
+
+    --emerald: 160 84% 39%; /* #10B981 */
+    --emerald-muted: 160 84% 39% / 0.15;
+
+    --orange: 24 95% 53%; /* #F97316 */
+    --crimson: 0 84% 60%; /* #EF4444 */
+
+    --radius: 16px;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: radial-gradient(1200px 600px at 20% -10%, hsla(var(--amber) / 0.08), transparent),
+                radial-gradient(800px 400px at 90% 20%, hsla(var(--emerald) / 0.06), transparent),
+                hsl(var(--background));
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: hsla(var(--glass));
+    border: 1px solid hsla(var(--glass-border));
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  }
+  .glass-strong {
+    background: hsla(0 0% 100% / 0.08);
+    border: 1px solid hsla(0 0% 100% / 0.12);
+    backdrop-filter: blur(24px) saturate(1.5);
+  }
+  .text-mono { font-family: theme(fontFamily.mono); }
+}
+
+/* Scrollbar minimalista */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--surface-3)); border-radius: 999px; }

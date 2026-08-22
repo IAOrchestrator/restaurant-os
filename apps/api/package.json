@@ -1,0 +1,37 @@
+{
+  "name": "@restaurant-os/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "pnpm --filter @restaurant-os/database db:generate",
+    "db:migrate": "pnpm --filter @restaurant-os/database db:migrate",
+    "db:studio": "pnpm --filter @restaurant-os/database db:studio",
+    "db:push": "pnpm --filter @restaurant-os/database db:push"
+  },
+  "dependencies": {
+    "fastify": "^4.28.0",
+    "@fastify/cors": "^9.0.0",
+    "@restaurant-os/config": "workspace:*",
+    "@restaurant-os/domain": "workspace:*",
+    "@restaurant-os/application": "workspace:*",
+    "@restaurant-os/infrastructure": "workspace:*",
+    "@restaurant-os/contracts": "workspace:*",
+    "zod": "^3.23.0",
+    "@restaurant-os/database": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "tsx": "^4.16.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@types/node": "^20.14.0"
+  }
+}

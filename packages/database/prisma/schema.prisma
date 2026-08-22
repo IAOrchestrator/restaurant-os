@@ -1,0 +1,483 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Foundation Schema
+// Extensible, UUID-based, with createdAt/updatedAt on all entities
+// ============================================================
+
+model Restaurant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tables        Table[]
+  staff         Staff[]
+  waitlist      WaitlistEntry[]
+  tableSessions TableSession[]
+  preOrders     PreOrder[]
+  orders        Order[]
+  accounts      Account[]
+  events        EventLog[]
+  reviews       Review[]
+  categories    Category[]
+  products      Product[]
+  kitchenOrders KitchenOrder[]
+  serviceTasks  ServiceTask[]
+  tableDevices  TableDevice[]
+  rawMaterials  RawMaterial[]
+
+  @@index([createdAt])
+}
+
+model Staff {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  email        String
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  restaurant Restaurant            @relation(fields: [restaurantId], references: [id])
+  roles      StaffRoleAssignment[]
+
+  @@index([restaurantId])
+  @@index([email])
+}
+
+model StaffRoleAssignment {
+  id        String    @id @default(uuid())
+  staffId   String
+  role      StaffRole
+  createdAt DateTime  @default(now())
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, role])
+  @@index([staffId])
+  @@index([role])
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  waitlistEntries WaitlistEntry[]
+  preOrders       PreOrder[]
+  orders          Order[]
+  reviews         Review[]
+}
+
+model Table {
+  id           String      @id @default(uuid())
+  restaurantId String
+  number       Int
+  capacity     Int
+  status       TableStatus @default(AVAILABLE)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id])
+  tableSessions TableSession[]
+  tableDevice   TableDevice?
+
+  @@index([restaurantId])
+  @@index([status])
+}
+
+model TableDevice {
+  id           String   @id @default(uuid())
+  restaurantId String
+  tableId      String?  @unique
+  name         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  table      Table?     @relation(fields: [tableId], references: [id])
+
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([active])
+}
+
+model TableSession {
+  id                String             @id @default(uuid())
+  restaurantId      String
+  tableId           String
+  status            TableSessionStatus @default(ASSIGNED)
+  customerIds       String?
+  tableHistory      String?
+  waiterAssignments String?
+  openedAt          DateTime           @default(now())
+  closedAt          DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  table      Table      @relation(fields: [tableId], references: [id])
+  orders     Order[]
+  accounts   Account[]
+
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WaitlistEntry {
+  id           String         @id @default(uuid())
+  restaurantId String
+  customerId   String
+  partySize    Int
+  status       WaitlistStatus @default(WAITING)
+  enteredAt    DateTime       @default(now())
+  calledAt     DateTime?
+  seatedAt     DateTime?
+  cancelledAt  DateTime?
+  preOrderId   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PreOrder {
+  id           String         @id @default(uuid())
+  restaurantId String
+  customerId   String
+  status       PreOrderStatus @default(DRAFT)
+  items        Json
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  restaurantId   String
+  tableSessionId String
+  customerId     String?
+  status         OrderStatus @default(DRAFT)
+  items          Json
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id])
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+
+  @@index([restaurantId])
+  @@index([tableSessionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Account {
+  id             String        @id @default(uuid())
+  restaurantId   String
+  tableSessionId String
+  status         AccountStatus @default(OPEN)
+  totalAmount    Decimal       @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id])
+  payments     Payment[]
+
+  @@index([restaurantId])
+  @@index([tableSessionId])
+  @@index([status])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  accountId String
+  amount    Decimal
+  method    String
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+}
+
+model Category {
+  id           String    @id @default(uuid())
+  restaurantId String
+  name         String
+  description  String?
+  sortOrder    Int       @default(0)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  products   Product[]
+
+  @@index([restaurantId])
+  @@index([sortOrder])
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  restaurantId String
+  categoryId   String
+  name         String
+  description  String?
+  price        Decimal
+  imageUrl     String?
+  isAvailable  Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant  Restaurant   @relation(fields: [restaurantId], references: [id])
+  category    Category     @relation(fields: [categoryId], references: [id])
+  recipeItems RecipeItem[]
+
+  @@index([restaurantId])
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+model KitchenOrder {
+  id            String             @id @default(uuid())
+  restaurantId  String
+  orderId       String             @unique
+  status        KitchenOrderStatus @default(RECEIVED)
+  assignedTo    String?
+  priority      Int                @default(0)
+  receivedAt    DateTime           @default(now())
+  startedAt     DateTime?
+  nearlyReadyAt DateTime?
+  readyAt       DateTime?
+  completedAt   DateTime?
+  notes         String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([orderId])
+  @@index([assignedTo])
+  @@index([createdAt])
+}
+
+model ServiceTask {
+  id             String            @id @default(uuid())
+  restaurantId   String
+  tableSessionId String?
+  type           ServiceTaskType
+  status         ServiceTaskStatus @default(PENDING)
+  assignedTo     String?
+  notes          String?
+  createdAt      DateTime          @default(now())
+  assignedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  updatedAt      DateTime          @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([assignedTo])
+  @@index([tableSessionId])
+  @@index([createdAt])
+}
+
+model EventLog {
+  id             String   @id @default(uuid())
+  eventType      String
+  restaurantId   String
+  aggregateType  String
+  aggregateId    String
+  tableSessionId String?
+  timestamp      DateTime @default(now())
+  actorType      String?
+  actorId        String?
+  payload        Json
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
+  @@index([eventType])
+  @@index([aggregateId])
+  @@index([tableSessionId])
+  @@index([timestamp])
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  restaurantId String
+  customerId   String
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+
+  @@index([restaurantId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum StaffRole {
+  ADMIN
+  RECEPTIONIST
+  WAITER
+  KITCHEN
+  CASHIER
+}
+
+enum TableStatus {
+  AVAILABLE
+  ASSIGNED
+  OCCUPIED
+}
+
+enum TableSessionStatus {
+  ASSIGNED
+  OCCUPIED
+  OPEN
+  CLOSING
+  CLOSED
+}
+
+enum WaitlistStatus {
+  PREPARED
+  WAITING
+  CALLED
+  CUSTOMER_CONFIRMED
+  WAITING_FOR_SEATING
+  SEATED
+  CANCELLED
+  TAKEAWAY
+  EXPIRED
+  NO_SHOW
+}
+
+enum PreOrderStatus {
+  DRAFT
+  READY
+  REVIEWING
+  CONFIRMED
+  CANCELLED
+}
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum AccountStatus {
+  OPEN
+  REQUESTED
+  PAID
+  CLOSED
+}
+
+enum KitchenOrderStatus {
+  RECEIVED
+  STARTED
+  NEARLY_READY
+  READY
+  COMPLETED
+}
+
+enum ServiceTaskType {
+  TAKE_ORDER
+  SERVE_FOOD
+  CHECK_ACCOUNT
+  CLEAN_TABLE
+  DELIVER_ORDER
+  CUSTOMER_REQUEST
+}
+
+enum ServiceTaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model RawMaterial {
+  id            String        @id @default(uuid())
+  restaurantId  String
+  name          String
+  unit          UnitOfMeasure @default(UNIT)
+  currentStock  Decimal       @default(0)
+  minStockAlert Decimal       @default(0)
+  unitCost      Decimal       @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  restaurant    Restaurant    @relation(fields: [restaurantId], references: [id])
+  recipeItems   RecipeItem[]
+
+  @@index([restaurantId])
+  @@index([name])
+}
+
+model RecipeItem {
+  id            String      @id @default(uuid())
+  productId     String
+  rawMaterialId String
+  quantity      Decimal
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id])
+
+  @@unique([productId, rawMaterialId])
+  @@index([productId])
+  @@index([rawMaterialId])
+}
+
+enum UnitOfMeasure {
+  KG
+  G
+  L
+  ML
+  UNIT
+}

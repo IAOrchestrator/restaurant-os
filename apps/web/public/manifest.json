@@ -1,0 +1,17 @@
+{
+  "short_name": "RestaurantOS",
+  "name": "Restaurant OS — Gastronomy POS & ERP",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#08080A",
+  "theme_color": "#08080A",
+  "display": "standalone",
+  "orientation": "any",
+  "categories": ["business", "food", "productivity"]
+}

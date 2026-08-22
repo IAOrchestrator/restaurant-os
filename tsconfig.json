@@ -1,0 +1,63 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2022"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@restaurant-os/config": ["./packages/config/src"],
+      "@restaurant-os/contracts": ["./packages/contracts/src"],
+      "@restaurant-os/domain": ["./packages/domain/src"],
+      "@restaurant-os/application": ["./packages/application/src"],
+      "@restaurant-os/infrastructure": ["./packages/infrastructure/src"],
+      "@restaurant-os/database": ["./packages/database/src"],
+      "@restaurant-os/ui": ["./packages/ui/src"]
+    }
+  },
+  "include": [],
+  "references": [
+    {
+      "path": "./packages/database"
+    },
+    {
+      "path": "./packages/config"
+    },
+    {
+      "path": "./packages/contracts"
+    },
+    {
+      "path": "./packages/domain"
+    },
+    {
+      "path": "./packages/application"
+    },
+    {
+      "path": "./packages/infrastructure"
+    },
+    {
+      "path": "./packages/ui"
+    },
+    {
+      "path": "./apps/api"
+    },
+    {
+      "path": "./apps/web"
+    }
+  ]
+}

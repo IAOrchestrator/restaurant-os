@@ -19,7 +19,10 @@ export function useApi() {
       };
 
       try {
-        const response = await fetch(url, {
+        const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ? import.meta.env.VITE_API_URL : '';
+        const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+
+        const response = await fetch(fullUrl, {
           ...options,
           headers,
         });

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Restaurant Operating System \u2014 Modular monolith for gastronomic establishments",
   "scripts": {
-    "build": "turbo run build",
+    "build": "pnpm --filter @restaurant-os/database db:generate && turbo run build",
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",

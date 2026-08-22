@@ -1,6 +1,7 @@
 import type { EventPublisher } from '@restaurant-os/application';
 import type { EventLogRepository } from '@restaurant-os/application';
 import { EventLog } from '@restaurant-os/domain';
+import { randomUUID } from 'crypto';
 
 export class PersistingEventPublisher implements EventPublisher {
   constructor(
@@ -22,7 +23,7 @@ export class PersistingEventPublisher implements EventPublisher {
     const actorId = (payload.actorId as string) || null;
 
     const eventResult = EventLog.create({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       eventType,
       restaurantId,
       aggregateType,

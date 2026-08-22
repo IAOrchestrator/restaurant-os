@@ -1,5 +1,6 @@
 import { Customer, type CustomerId } from '@restaurant-os/domain';
 import type { CustomerRepository } from '../../ports/customer-repository';
+import { randomUUID } from 'crypto';
 
 export interface CreateCustomerInput {
   id?: CustomerId;
@@ -12,7 +13,7 @@ export class CreateCustomerUseCase {
   constructor(private readonly customerRepo: CustomerRepository) {}
 
   async execute(input: CreateCustomerInput): Promise<Customer> {
-    const id = input.id ?? crypto.randomUUID();
+    const id = input.id ?? randomUUID();
 
     const customerResult = Customer.create({
       id,

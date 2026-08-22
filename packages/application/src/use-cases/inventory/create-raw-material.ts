@@ -1,5 +1,6 @@
 import { RawMaterial, UnitOfMeasure } from '@restaurant-os/domain';
 import { RawMaterialRepository } from '../../ports/raw-material-repository';
+import { randomUUID } from 'crypto';
 
 export interface CreateRawMaterialInput {
   id?: string;
@@ -16,7 +17,7 @@ export class CreateRawMaterialUseCase {
 
   async execute(input: CreateRawMaterialInput): Promise<RawMaterial> {
     const rawMaterial = new RawMaterial({
-      id: input.id || crypto.randomUUID(),
+      id: input.id || randomUUID(),
       restaurantId: input.restaurantId,
       name: input.name,
       unit: input.unit,

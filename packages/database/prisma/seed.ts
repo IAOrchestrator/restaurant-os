@@ -48,6 +48,14 @@ async function main() {
     { id: CASHIER_ID, name: 'Lucía Pérez (Cajera)', email: 'caja@pizzeria.com', roles: [StaffRole.CASHIER] },
   ];
 
+  // Default hashes for seed users:
+  // Password: password123
+  // PIN: 1234
+  // Device Secret: secret123
+  const DEFAULT_PASSWORD_HASH = '$argon2id$v=19$m=65536,p=4,t=3$ICpl1XzwWI5+59Ua8BDZTA$OO0aYndQr0nsnICSzMrxUeDfHQYpAaHTCp7zZOODokU';
+  const DEFAULT_PIN_HASH = '$argon2id$v=19$m=65536,p=4,t=3$BX/GgCOL7zHoJwdhJiONYQ$Ym8gGtdovZXy7ntn2AyfyycAgkL61PkTys6w3ct1GPo';
+  const DEFAULT_DEVICE_SECRET_HASH = '$argon2id$v=19$m=65536,p=4,t=3$tat1XjjNsNbRV25EWhAWMw$CERCcVaM8Zxi6cxL38Rg0wSxbCJrdCtJxhzANouCVnM';
+
   for (const s of staffMembers) {
     await prisma.staff.upsert({
       where: { id: s.id },
@@ -56,11 +64,15 @@ async function main() {
         restaurantId: RESTAURANT_ID,
         name: s.name,
         email: s.email,
+        passwordHash: DEFAULT_PASSWORD_HASH,
+        pinCodeHash: DEFAULT_PIN_HASH,
         active: true,
       },
       update: {
         name: s.name,
         email: s.email,
+        passwordHash: DEFAULT_PASSWORD_HASH,
+        pinCodeHash: DEFAULT_PIN_HASH,
       },
     });
 
@@ -80,7 +92,7 @@ async function main() {
       });
     }
   }
-  console.log(`✅ Personal y roles configurados (${staffMembers.length} usuarios)`);
+  console.log(`✅ Personal y roles configurados (${staffMembers.length} usuarios con password y PIN)`);
 
   // 3. Crear Mesas
   const tables = [
@@ -128,11 +140,13 @@ async function main() {
         restaurantId: RESTAURANT_ID,
         name: d.name,
         tableId: d.tableId,
+        deviceSecretHash: DEFAULT_DEVICE_SECRET_HASH,
         active: true,
       },
       update: {
         name: d.name,
         tableId: d.tableId,
+        deviceSecretHash: DEFAULT_DEVICE_SECRET_HASH,
         active: true,
       },
     });

@@ -11,9 +11,6 @@ import {
   UpdateCustomerProfileUseCase,
   type CustomerRepository,
 } from '@restaurant-os/application';
-import {
-  requirePermission,
-} from '@restaurant-os/infrastructure';
 import { Permission } from '@restaurant-os/domain';
 
 export interface CustomerRoutesOptions {
@@ -38,7 +35,7 @@ export async function customerRoutes(
       updatedAt: c.updatedAt.toISOString(),
     });
 
-  // POST /api/customers
+  // POST /api/customers (Public registration for mobile diners)
   app.post(
     '/',
     async (request, reply) => {
@@ -61,16 +58,23 @@ export async function customerRoutes(
     },
   );
 
-  // GET /api/customers/:id
+  // GET /api/customers/:id (Staff with CUSTOMER_MANAGE or self-customer)
   app.get(
     '/:id',
-    {
-      preHandler: [
-        requirePermission(Permission.CUSTOMER_MANAGE),
-      ],
-    },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+
+      const isSelf = request.actor?.isCustomer() && request.actor.id === id && id !== 'anonymous';
+      let isStaffAllowed = false;
+      if (request.actor?.isStaff()) {
+        const checker = request.permissionChecker;
+        isStaffAllowed = Boolean(checker && (await checker.hasPermission(request.actor, Permission.CUSTOMER_MANAGE)));
+      }
+
+      if (!isSelf && !isStaffAllowed && !request.actor?.isSystem()) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Forbidden: requires customer.manage or ownership' });
+      }
+
       const customer = await getUseCase.execute(id);
       if (!customer) {
         return reply.status(404).send({ error: 'Customer not found' });
@@ -79,11 +83,23 @@ export async function customerRoutes(
     },
   );
 
-  // PATCH /api/customers/:id
+  // PATCH /api/customers/:id (Staff with CUSTOMER_MANAGE or self-customer)
   app.patch(
     '/:id',
     async (request, reply) => {
       const { id } = request.params as { id: string };
+
+      const isSelf = request.actor?.isCustomer() && request.actor.id === id && id !== 'anonymous';
+      let isStaffAllowed = false;
+      if (request.actor?.isStaff()) {
+        const checker = request.permissionChecker;
+        isStaffAllowed = Boolean(checker && (await checker.hasPermission(request.actor, Permission.CUSTOMER_MANAGE)));
+      }
+
+      if (!isSelf && !isStaffAllowed && !request.actor?.isSystem()) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Forbidden: requires customer.manage or ownership' });
+      }
+
       const parsed = UpdateCustomerSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: parsed.error.format() });

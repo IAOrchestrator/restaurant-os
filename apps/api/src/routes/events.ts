@@ -129,7 +129,8 @@ export async function eventRoutes(app: FastifyInstance, opts: EventRoutesOptions
     async (request, _reply) => {
       const { aggregateId } = request.params as { aggregateId: string };
       const events = await listByAggregateUseCase.execute(aggregateId);
-      return events.map((e) => formatEvent(e));
+      const filtered = events.filter((e) => !request.actor.restaurantId || request.actor.isSystem() || e.restaurantId === request.actor.restaurantId);
+      return filtered.map((e) => formatEvent(e));
     },
   );
 
@@ -144,7 +145,8 @@ export async function eventRoutes(app: FastifyInstance, opts: EventRoutesOptions
     async (request, _reply) => {
       const { tableSessionId } = request.params as { tableSessionId: string };
       const events = await opts.eventLogRepo.findByTableSessionId(tableSessionId);
-      return events.map((e) => formatEvent(e));
+      const filtered = events.filter((e) => !request.actor.restaurantId || request.actor.isSystem() || e.restaurantId === request.actor.restaurantId);
+      return filtered.map((e) => formatEvent(e));
     },
   );
 }

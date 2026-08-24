@@ -123,6 +123,7 @@ export const EventTypeSchema = z.enum([
   'KITCHEN_ORDER_ASSIGNED',
   'ACCOUNT_REQUESTED',
   'PAYMENT_REGISTERED',
+  'ACCOUNT_CLOSED',
   'TABLE_CLOSED',
   'TABLE_RELEASED',
   'TABLE_DEVICE_REGISTERED',
@@ -646,17 +647,27 @@ export const TableDeviceResponseSchema = z.object({
 export type TableDeviceResponse = z.infer<typeof TableDeviceResponseSchema>;
 
 // --- Auth Contracts ---
-export const StaffLoginSchema = z.object({
-  staffId: UuidSchema.optional(),
-  email: z.string().email().optional(),
-  restaurantId: UuidSchema,
-});
+export const StaffLoginSchema = z
+  .object({
+    staffId: UuidSchema.optional(),
+    email: z.string().email().optional(),
+    restaurantId: UuidSchema,
+    password: z.string().min(1).optional(),
+    pin: z.string().min(1).optional(),
+  })
+  .refine((data) => Boolean(data.staffId || data.email), {
+    message: 'Either staffId or email is required',
+  })
+  .refine((data) => Boolean(data.password || data.pin), {
+    message: 'Either password or pin is required',
+  });
 
 export type StaffLoginInput = z.infer<typeof StaffLoginSchema>;
 
 export const TableDeviceAuthSchema = z.object({
   deviceId: UuidSchema,
   restaurantId: UuidSchema,
+  deviceSecret: z.string().min(1, 'deviceSecret is required'),
 });
 
 export type TableDeviceAuthInput = z.infer<typeof TableDeviceAuthSchema>;

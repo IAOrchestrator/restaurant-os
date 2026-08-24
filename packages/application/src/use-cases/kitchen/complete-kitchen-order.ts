@@ -1,9 +1,19 @@
-import { KitchenOrder, ok, err, type Result } from '@restaurant-os/domain';
+import {
+  KitchenOrder,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { KitchenOrderRepository } from '../../ports/kitchen-order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 
 export interface CompleteKitchenOrderInput {
   kitchenOrderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CompleteKitchenOrderUseCase {
@@ -24,11 +34,22 @@ export class CompleteKitchenOrderUseCase {
     }
 
     await this.kitchenOrderRepo.save(completed.value);
-    await this.eventPublisher.publish('ORDER_DELIVERED', {
-      kitchenOrderId: completed.value.id,
-      orderId: completed.value.orderId,
-      restaurantId: completed.value.restaurantId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ORDER_DELIVERED,
+        restaurantId: completed.value.restaurantId,
+        aggregateType: 'KitchenOrder',
+        aggregateId: completed.value.id,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          kitchenOrderId: completed.value.id,
+          orderId: completed.value.orderId,
+          restaurantId: completed.value.restaurantId,
+        },
+      }),
+    );
 
     return ok(completed.value);
   }

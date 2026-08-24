@@ -1,14 +1,23 @@
-import { TableSession } from '@restaurant-os/domain';
+import {
+  TableSession,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { TableSessionRepository } from '../../ports/table-session-repository';
 import type { TableRepository } from '../../ports/table-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface CreateTableSessionInput {
   id: string;
   restaurantId: string;
   tableId: string;
   initialWaiterId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CreateTableSessionUseCase {
@@ -46,12 +55,27 @@ export class CreateTableSessionUseCase {
     }
 
     await this.sessionRepo.save(session.value);
-    await this.eventPublisher.publish('TABLE_ASSIGNED', {
-      tableId: input.tableId,
-      sessionId: input.id,
-      restaurantId: input.restaurantId,
-      waiterId: input.initialWaiterId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_ASSIGNED,
+        restaurantId: input.restaurantId,
+        aggregateType: 'TableSession',
+        aggregateId: session.value.id,
+        tableSessionId: session.value.id,
+        tableId: input.tableId,
+        tableNumber: table.number,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? input.initialWaiterId,
+        payload: {
+          sessionId: input.id,
+          tableId: input.tableId,
+          tableNumber: table.number,
+          restaurantId: input.restaurantId,
+          waiterId: input.initialWaiterId,
+        },
+      }),
+    );
 
     return ok(session.value);
   }

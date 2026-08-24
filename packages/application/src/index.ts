@@ -3,6 +3,7 @@
 
 export * from './ports/repository';
 export * from './ports/event-publisher';
+export * from './ports/transaction-runner';
 export * from './ports/table-repository';
 export * from './ports/table-session-repository';
 export * from './ports/customer-repository';

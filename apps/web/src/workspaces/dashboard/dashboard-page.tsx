@@ -84,8 +84,6 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchLiveMetrics();
-    const interval = setInterval(fetchLiveMetrics, 5000);
-    return () => clearInterval(interval);
   }, [fetchLiveMetrics]);
 
   // Live SSE real-time updates
@@ -93,15 +91,22 @@ export function DashboardPage() {
     token: authToken,
     eventTypes: [
       'TABLE_ASSIGNED',
+      'TABLE_CHANGED',
+      'TABLE_RELEASED',
       'TABLE_CLOSED',
+      'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
       'ORDER_READY',
       'ORDER_DELIVERED',
+      'ACCOUNT_REQUESTED',
       'PAYMENT_REGISTERED',
+      'ACCOUNT_CLOSED',
       'SERVICE_TASK_CREATED',
-      'STOCK_ALERT_TRIGGERED',
     ],
     onEvent: () => {
+      fetchLiveMetrics();
+    },
+    onReconnect: () => {
       fetchLiveMetrics();
     },
   });

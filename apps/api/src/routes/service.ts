@@ -47,6 +47,20 @@ export async function serviceRoutes(app: FastifyInstance, opts: ServiceRoutesOpt
         return reply.status(400).send({ error: parsed.error.format() });
       }
 
+      // Enforce fine-grained contextual scoping for TABLE_DEVICE and CUSTOMER
+      const scoper = request.resourceScoper;
+      if (scoper && (request.actor.isTableDevice() || request.actor.isCustomer())) {
+        const sessionScope = await scoper.getScope(request.actor, 'table-session');
+        if (sessionScope.isOwn() && sessionScope.resourceIds !== null) {
+          if (parsed.data.tableSessionId && !sessionScope.canAccess(parsed.data.tableSessionId)) {
+            return reply.status(403).send({
+              error: 'Forbidden',
+              message: `Access denied to table session outside actor scope: ${parsed.data.tableSessionId}`,
+            });
+          }
+        }
+      }
+
       const result = await createUseCase.execute({
         id: parsed.data.id ?? randomUUID(),
         restaurantId: parsed.data.restaurantId,

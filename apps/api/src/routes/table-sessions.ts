@@ -23,12 +23,14 @@ import {
   type TableRepository,
   type TableSessionRepository,
   type EventPublisher,
+  type TransactionRunner,
 } from '@restaurant-os/application';
 
 export interface TableSessionRoutesOptions {
   tableRepo: TableRepository;
   sessionRepo: TableSessionRepository;
   eventPublisher: EventPublisher;
+  txRunner?: TransactionRunner;
 }
 
 export async function tableSessionRoutes(
@@ -53,6 +55,7 @@ export async function tableSessionRoutes(
     opts.sessionRepo,
     opts.tableRepo,
     opts.eventPublisher,
+    opts.txRunner,
   );
   const addCustomerUseCase = new AddCustomerToSessionUseCase(
     opts.sessionRepo,
@@ -148,6 +151,9 @@ export async function tableSessionRoutes(
       if (!session) {
         return reply.status(404).send({ error: 'TableSession not found' });
       }
+      if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+      }
       return formatSession(session);
     },
   );
@@ -155,6 +161,14 @@ export async function tableSessionRoutes(
   // Close Table Session handler
   const closeSessionHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
+    const session = await opts.sessionRepo.findById(id);
+    if (!session) {
+      return reply.status(404).send({ error: 'TableSession not found' });
+    }
+    if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+      return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+    }
+
     const result = await closeUseCase.execute({ sessionId: id });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
@@ -168,6 +182,14 @@ export async function tableSessionRoutes(
   // Change Waiter handler
   const changeWaiterHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
+    const session = await opts.sessionRepo.findById(id);
+    if (!session) {
+      return reply.status(404).send({ error: 'TableSession not found' });
+    }
+    if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+      return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+    }
+
     const parsed = ChangeWaiterSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.format() });
@@ -191,6 +213,14 @@ export async function tableSessionRoutes(
   // Change Table handler
   const changeTableHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
+    const session = await opts.sessionRepo.findById(id);
+    if (!session) {
+      return reply.status(404).send({ error: 'TableSession not found' });
+    }
+    if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+      return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+    }
+
     const parsed = ChangeTableSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.format() });
@@ -215,11 +245,20 @@ export async function tableSessionRoutes(
     '/:id/customers',
     {
       preHandler: [
+        requirePermission(Permission.TABLE_SESSIONS_MANAGE),
         requireResourceAccess('table-session'),
       ],
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const session = await opts.sessionRepo.findById(id);
+      if (!session) {
+        return reply.status(404).send({ error: 'TableSession not found' });
+      }
+      if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+      }
+
       const parsed = AddCustomerToSessionSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: parsed.error.format() });
@@ -242,11 +281,19 @@ export async function tableSessionRoutes(
     '/:id/customers/:customerId',
     {
       preHandler: [
+        requirePermission(Permission.TABLE_SESSIONS_MANAGE),
         requireResourceAccess('table-session'),
       ],
     },
     async (request, reply) => {
       const { id, customerId } = request.params as { id: string; customerId: string };
+      const session = await opts.sessionRepo.findById(id);
+      if (!session) {
+        return reply.status(404).send({ error: 'TableSession not found' });
+      }
+      if (request.actor.restaurantId && session.restaurantId !== request.actor.restaurantId && !request.actor.isSystem()) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
+      }
 
       try {
         const updated = await removeCustomerUseCase.execute({

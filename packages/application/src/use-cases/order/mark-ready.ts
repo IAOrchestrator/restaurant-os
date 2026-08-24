@@ -1,10 +1,19 @@
-import { Order } from '@restaurant-os/domain';
+import {
+  Order,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { OrderRepository } from '../../ports/order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface MarkOrderReadyInput {
   orderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class MarkOrderReadyUseCase {
@@ -25,11 +34,23 @@ export class MarkOrderReadyUseCase {
     }
 
     await this.orderRepo.save(ready.value);
-    await this.eventPublisher.publish('ORDER_READY', {
-      orderId: ready.value.id,
-      restaurantId: ready.value.restaurantId,
-      tableSessionId: ready.value.tableSessionId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ORDER_READY,
+        restaurantId: ready.value.restaurantId,
+        aggregateType: 'Order',
+        aggregateId: ready.value.id,
+        tableSessionId: ready.value.tableSessionId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          orderId: ready.value.id,
+          restaurantId: ready.value.restaurantId,
+          tableSessionId: ready.value.tableSessionId,
+        },
+      }),
+    );
 
     return ok(ready.value);
   }

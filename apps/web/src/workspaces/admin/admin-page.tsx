@@ -110,15 +110,24 @@ export function AdminPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 6000);
-    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Real-time SSE
   useSse({
     token: authToken,
-    eventTypes: ['PRODUCT_CREATED', 'PRODUCT_UPDATED', 'TABLE_DEVICE_REGISTERED', 'TABLE_ASSIGNED', 'STOCK_ALERT_TRIGGERED'],
+    eventTypes: [
+      'TABLE_DEVICE_REGISTERED',
+      'TABLE_DEVICE_ASSOCIATED',
+      'TABLE_DEVICE_DISASSOCIATED',
+      'TABLE_ASSIGNED',
+      'TABLE_CLOSED',
+      'ACCOUNT_CLOSED',
+      'REVIEW_CREATED',
+    ],
     onEvent: () => {
+      fetchData();
+    },
+    onReconnect: () => {
       fetchData();
     },
   });

@@ -9,7 +9,10 @@ import {
   PrismaServiceTaskRepository,
   PrismaOrderRepository,
   PrismaRawMaterialRepository,
+  requirePermission,
+  validateRestaurantAccess,
 } from '@restaurant-os/infrastructure';
+import { Permission } from '@restaurant-os/domain';
 
 export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
   const tableRepo = new PrismaTableRepository();
@@ -32,17 +35,26 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
     rawMaterialRepo,
   );
 
-  fastify.get('/live-operations', async (request, reply) => {
-    const { restaurantId } = request.query as { restaurantId?: string };
-    if (!restaurantId) {
-      return reply.status(400).send({ error: 'restaurantId is required' });
-    }
+  fastify.get(
+    '/live-operations',
+    {
+      preHandler: [
+        requirePermission(Permission.ANALYTICS_READ),
+        validateRestaurantAccess(),
+      ],
+    },
+    async (request, reply) => {
+      const { restaurantId } = request.query as { restaurantId?: string };
+      if (!restaurantId) {
+        return reply.status(400).send({ error: 'restaurantId is required' });
+      }
 
-    try {
-      const report = await getLiveOperations.execute(restaurantId);
-      return reply.send(report);
-    } catch (err: any) {
-      return reply.status(500).send({ error: err.message || 'Internal server error' });
-    }
-  });
+      try {
+        const report = await getLiveOperations.execute(restaurantId);
+        return reply.send(report);
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message || 'Internal server error' });
+      }
+    },
+  );
 };

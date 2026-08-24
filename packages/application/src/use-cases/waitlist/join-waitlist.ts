@@ -1,7 +1,14 @@
-import { WaitlistEntry } from '@restaurant-os/domain';
+import {
+  WaitlistEntry,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { WaitlistRepository } from '../../ports/waitlist-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface JoinWaitlistInput {
   id: string;
@@ -9,6 +16,8 @@ export interface JoinWaitlistInput {
   customerId: string;
   partySize: number;
   preOrderId?: string | null;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class JoinWaitlistUseCase {
@@ -41,13 +50,24 @@ export class JoinWaitlistUseCase {
     }
 
     await this.waitlistRepo.save(joined.value);
-    await this.eventPublisher.publish('CUSTOMER_JOINED_WAITLIST', {
-      entryId: joined.value.id,
-      restaurantId: joined.value.restaurantId,
-      customerId: joined.value.customerId,
-      partySize: joined.value.partySize,
-      preOrderId: joined.value.preOrderId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_JOINED_WAITLIST,
+        restaurantId: joined.value.restaurantId,
+        aggregateType: 'WaitlistEntry',
+        aggregateId: joined.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? input.customerId,
+        payload: {
+          entryId: joined.value.id,
+          restaurantId: joined.value.restaurantId,
+          customerId: joined.value.customerId,
+          partySize: joined.value.partySize,
+          preOrderId: joined.value.preOrderId,
+        },
+      }),
+    );
 
     return ok(joined.value);
   }

@@ -1,10 +1,19 @@
-import { WaitlistEntry } from '@restaurant-os/domain';
+import {
+  WaitlistEntry,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { WaitlistRepository } from '../../ports/waitlist-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface ConfirmCustomerInput {
   entryId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class ConfirmCustomerUseCase {
@@ -25,11 +34,23 @@ export class ConfirmCustomerUseCase {
     }
 
     await this.waitlistRepo.save(confirmed.value);
-    await this.eventPublisher.publish('CUSTOMER_CONFIRMED', {
-      entryId: confirmed.value.id,
-      restaurantId: confirmed.value.restaurantId,
-      customerId: confirmed.value.customerId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_CONFIRMED,
+        restaurantId: confirmed.value.restaurantId,
+        aggregateType: 'WaitlistEntry',
+        aggregateId: confirmed.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? confirmed.value.customerId,
+        payload: {
+          entryId: confirmed.value.id,
+          restaurantId: confirmed.value.restaurantId,
+          customerId: confirmed.value.customerId,
+          confirmedAt: confirmed.value.updatedAt.toISOString(),
+        },
+      }),
+    );
 
     return ok(confirmed.value);
   }

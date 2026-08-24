@@ -1,10 +1,19 @@
-import { Account } from '@restaurant-os/domain';
+import {
+  Account,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { AccountRepository } from '../../ports/account-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface RequestPaymentInput {
   accountId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class RequestPaymentUseCase {
@@ -25,12 +34,24 @@ export class RequestPaymentUseCase {
     }
 
     await this.accountRepo.save(requested.value);
-    await this.eventPublisher.publish('ACCOUNT_REQUESTED', {
-      accountId: requested.value.id,
-      restaurantId: requested.value.restaurantId,
-      tableSessionId: requested.value.tableSessionId,
-      totalAmount: requested.value.totalAmount,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ACCOUNT_REQUESTED,
+        restaurantId: requested.value.restaurantId,
+        aggregateType: 'Account',
+        aggregateId: requested.value.id,
+        tableSessionId: requested.value.tableSessionId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          accountId: requested.value.id,
+          restaurantId: requested.value.restaurantId,
+          tableSessionId: requested.value.tableSessionId,
+          totalAmount: requested.value.totalAmount,
+        },
+      }),
+    );
 
     return ok(requested.value);
   }

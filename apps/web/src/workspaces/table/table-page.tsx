@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { useAppContext, DEFAULT_TABLE_DEVICE_ID } from '../../hooks/useContextState';
+import { useAppContext } from '../../hooks/useContextState';
 import { useSse } from '../../hooks/useSse';
 import {
   Bell,
@@ -51,7 +51,7 @@ export function TablePage() {
   const [loading, setLoading] = useState(false);
   const [serviceMsg, setServiceMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const deviceId = actorId || DEFAULT_TABLE_DEVICE_ID;
+  const deviceId = actorId;
 
   const fetchSessionAndMenu = useCallback(async () => {
     setLoading(true);
@@ -88,8 +88,21 @@ export function TablePage() {
   // Real-time updates
   useSse({
     token: authToken,
-    eventTypes: ['TABLE_ASSIGNED', 'TABLE_CLOSED', 'ORDER_DELIVERED'],
+    eventTypes: [
+      'TABLE_ASSIGNED',
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'ACCOUNT_REQUESTED',
+      'PAYMENT_REGISTERED',
+      'ACCOUNT_CLOSED',
+      'TABLE_CLOSED',
+    ],
     onEvent: () => {
+      fetchSessionAndMenu();
+    },
+    onReconnect: () => {
       fetchSessionAndMenu();
     },
   });

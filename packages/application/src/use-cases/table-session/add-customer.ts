@@ -2,6 +2,8 @@ import {
   type TableSession,
   type TableSessionId,
   EventType,
+  ActorType,
+  createDomainEvent,
 } from '@restaurant-os/domain';
 import type { TableSessionRepository } from '../../ports/table-session-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
@@ -9,6 +11,8 @@ import type { EventPublisher } from '../../ports/event-publisher';
 export interface AddCustomerToSessionInput {
   sessionId: TableSessionId;
   customerId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class AddCustomerToSessionUseCase {
@@ -31,13 +35,22 @@ export class AddCustomerToSessionUseCase {
     const updatedSession = addResult.value;
     await this.sessionRepo.save(updatedSession);
 
-    await this.eventPublisher.publish(EventType.CUSTOMER_ADDED_TO_TABLE, {
-      tableSessionId: updatedSession.id,
-      restaurantId: updatedSession.restaurantId,
-      customerId: input.customerId,
-      aggregateType: 'TableSession',
-      aggregateId: updatedSession.id,
-    });
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_ADDED_TO_TABLE,
+        restaurantId: updatedSession.restaurantId,
+        aggregateType: 'TableSession',
+        aggregateId: updatedSession.id,
+        tableSessionId: updatedSession.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? input.customerId,
+        payload: {
+          tableSessionId: updatedSession.id,
+          restaurantId: updatedSession.restaurantId,
+          customerId: input.customerId,
+        },
+      }),
+    );
 
     return updatedSession;
   }

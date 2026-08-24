@@ -75,22 +75,28 @@ export function extractActor(
     return Actor.system();
   }
 
-  // 2. Fallback to developer / test headers
-  const headers = parseHeaders(request);
-  const actorType = headers['x-actor-type'] || (headers['x-actor-id'] ? 'CUSTOMER' : 'CUSTOMER');
-  const actorId = headers['x-actor-id'] || (actorType === ActorType.CUSTOMER ? 'anonymous' : 'system');
-  const restaurantId = headers['x-restaurant-id'] || null;
+  // 2. Fallback to developer / test headers (DISABLED in production)
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    const headers = parseHeaders(request);
+    const actorType = headers['x-actor-type'] || (headers['x-actor-id'] ? 'CUSTOMER' : 'CUSTOMER');
+    const actorId = headers['x-actor-id'] || (actorType === ActorType.CUSTOMER ? 'anonymous' : 'system');
+    const restaurantId = headers['x-restaurant-id'] || null;
 
-  if (actorType === ActorType.CUSTOMER) {
-    return Actor.customer(actorId, restaurantId);
+    if (actorType === ActorType.CUSTOMER) {
+      return Actor.customer(actorId, restaurantId);
+    }
+    if (actorType === ActorType.STAFF) {
+      return Actor.staff(actorId, restaurantId ?? 'unknown');
+    }
+    if (actorType === ActorType.TABLE_DEVICE) {
+      return Actor.tableDevice(actorId, restaurantId ?? 'unknown');
+    }
+    return Actor.system();
   }
-  if (actorType === ActorType.STAFF) {
-    return Actor.staff(actorId, restaurantId ?? 'unknown');
-  }
-  if (actorType === ActorType.TABLE_DEVICE) {
-    return Actor.tableDevice(actorId, restaurantId ?? 'unknown');
-  }
-  return Actor.system();
+
+  // In production, unauthenticated requests resolve to anonymous customer
+  return Actor.customer('anonymous', null);
 }
 
 // Setup auth on Fastify instance

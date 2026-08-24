@@ -50,8 +50,12 @@ class InMemorySessionRepo implements TableSessionRepository {
 
 class RecordingEventPublisher implements EventPublisher {
   public events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
-  async publish(eventType: string, payload: Record<string, unknown>) {
-    this.events.push({ eventType, payload });
+  async publish(eventOrType: any, payload?: any) {
+    if (typeof eventOrType === 'object' && eventOrType !== null && 'type' in eventOrType) {
+      this.events.push({ eventType: eventOrType.type, payload: eventOrType.payload });
+    } else {
+      this.events.push({ eventType: eventOrType, payload: payload ?? {} });
+    }
   }
 }
 

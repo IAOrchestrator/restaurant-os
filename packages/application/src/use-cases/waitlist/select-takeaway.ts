@@ -1,10 +1,19 @@
-import { WaitlistEntry } from '@restaurant-os/domain';
+import {
+  WaitlistEntry,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { WaitlistRepository } from '../../ports/waitlist-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface SelectTakeawayInput {
   entryId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class SelectTakeawayUseCase {
@@ -19,18 +28,29 @@ export class SelectTakeawayUseCase {
       return err(new Error('Waitlist entry not found'));
     }
 
-    const takeaway = entry.selectTakeaway();
-    if (!takeaway.success) {
-      return err(takeaway.error);
+    const selected = entry.selectTakeaway();
+    if (!selected.success) {
+      return err(selected.error);
     }
 
-    await this.waitlistRepo.save(takeaway.value);
-    await this.eventPublisher.publish('CUSTOMER_SELECTED_TAKEAWAY', {
-      entryId: takeaway.value.id,
-      restaurantId: takeaway.value.restaurantId,
-      customerId: takeaway.value.customerId,
-    });
+    await this.waitlistRepo.save(selected.value);
 
-    return ok(takeaway.value);
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_SELECTED_TAKEAWAY,
+        restaurantId: selected.value.restaurantId,
+        aggregateType: 'WaitlistEntry',
+        aggregateId: selected.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? selected.value.customerId,
+        payload: {
+          entryId: selected.value.id,
+          restaurantId: selected.value.restaurantId,
+          customerId: selected.value.customerId,
+        },
+      }),
+    );
+
+    return ok(selected.value);
   }
 }

@@ -21,7 +21,10 @@ import {
   CloseAccountUseCase,
   type AccountRepository,
   type OrderRepository,
+  type TableSessionRepository,
+  type TableRepository,
   type EventPublisher,
+  type TransactionRunner,
 } from '@restaurant-os/application';
 
 interface PaymentLike {
@@ -35,6 +38,9 @@ export interface BillingRoutesOptions {
   accountRepo: AccountRepository;
   orderRepo: OrderRepository;
   eventPublisher: EventPublisher;
+  sessionRepo?: TableSessionRepository;
+  tableRepo?: TableRepository;
+  txRunner?: TransactionRunner;
 }
 
 export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOptions) {
@@ -46,7 +52,13 @@ export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOpt
   );
   const requestPaymentUseCase = new RequestPaymentUseCase(opts.accountRepo, opts.eventPublisher);
   const registerPaymentUseCase = new RegisterPaymentUseCase(opts.accountRepo, opts.eventPublisher);
-  const closeUseCase = new CloseAccountUseCase(opts.accountRepo, opts.eventPublisher);
+  const closeUseCase = new CloseAccountUseCase(
+    opts.accountRepo,
+    opts.eventPublisher,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
 
   // POST /api/billing/accounts
   app.post(
@@ -297,7 +309,12 @@ export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOpt
   // Handler: close account
   const closeAccountHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const result = await closeUseCase.execute({ accountId: id });
+    const actor = request.actor;
+    const result = await closeUseCase.execute({
+      accountId: id,
+      actorType: actor?.type,
+      actorId: actor?.id,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }

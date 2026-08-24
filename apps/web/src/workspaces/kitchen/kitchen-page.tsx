@@ -92,15 +92,16 @@ export function KitchenPage() {
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 4000);
-    return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  // Real-time SSE refresh
+  // Real-time SSE refresh & snapshot on reconnect
   useSse({
     token: authToken,
-    eventTypes: ['ORDER_SENT_TO_KITCHEN', 'KITCHEN_ORDER_STARTED', 'KITCHEN_ORDER_NEARLY_READY', 'ORDER_READY', 'ORDER_DELIVERED'],
+    eventTypes: ['ORDER_SENT_TO_KITCHEN', 'KITCHEN_RECEIVED', 'KITCHEN_STARTED', 'ORDER_NEARLY_READY', 'ORDER_READY', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'TABLE_CHANGED'],
     onEvent: () => {
+      fetchOrders();
+    },
+    onReconnect: () => {
       fetchOrders();
     },
   });

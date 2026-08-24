@@ -1,50 +1,33 @@
 import React from 'react';
-import {
-  useAppContext,
-  DEFAULT_ADMIN_ID,
-  DEFAULT_WAITER_ID,
-  DEFAULT_RECEPTIONIST_ID,
-  DEFAULT_KITCHEN_ID,
-  DEFAULT_CASHIER_ID,
-  DEFAULT_CUSTOMER_ID,
-  DEFAULT_TABLE_DEVICE_ID,
-  type ActorType,
-  type StaffRole,
-} from '../../hooks/useContextState';
+import { useAppContext } from '../../hooks/useContextState';
+import { LogOut, User, Tablet, Users, Shield } from 'lucide-react';
 
 interface HeaderProps {
   connected: boolean;
 }
 
 export function Header({ connected }: HeaderProps) {
-  const {
-    actorType,
-    setActorType,
-    actorId,
-    setActorId,
-    staffRole,
-    setStaffRole,
-  } = useAppContext();
+  const { session, isAuthenticated, logout } = useAppContext();
 
-  const handleRoleChange = (role: StaffRole) => {
-    setStaffRole(role);
-    setActorType('STAFF');
-    if (role === 'ADMIN') setActorId(DEFAULT_ADMIN_ID);
-    else if (role === 'WAITER') setActorId(DEFAULT_WAITER_ID);
-    else if (role === 'RECEPTIONIST') setActorId(DEFAULT_RECEPTIONIST_ID);
-    else if (role === 'KITCHEN') setActorId(DEFAULT_KITCHEN_ID);
-    else if (role === 'CASHIER') setActorId(DEFAULT_CASHIER_ID);
-    else setActorId(DEFAULT_ADMIN_ID);
+  const getActorIcon = () => {
+    if (!session) return <User className="w-3.5 h-3.5" />;
+    if (session.actor.type === 'TABLE_DEVICE') return <Tablet className="w-3.5 h-3.5" />;
+    if (session.actor.roles?.includes('ADMIN')) return <Shield className="w-3.5 h-3.5" />;
+    return <Users className="w-3.5 h-3.5" />;
   };
 
-  const handleActorTypeChange = (type: ActorType) => {
-    setActorType(type);
-    if (type === 'CUSTOMER') {
-      setActorId(DEFAULT_CUSTOMER_ID);
-    } else if (type === 'TABLE_DEVICE') {
-      setActorId(DEFAULT_TABLE_DEVICE_ID);
-    } else {
-      handleRoleChange(staffRole);
+  const getRoleLabel = () => {
+    if (!session) return 'No autenticado';
+    if (session.actor.type === 'TABLE_DEVICE') return 'Terminal Tablet';
+    if (session.actor.type === 'CUSTOMER') return 'Comensal';
+    const primaryRole = session.actor.roles?.[0] || 'STAFF';
+    switch (primaryRole) {
+      case 'ADMIN': return 'Administrador';
+      case 'RECEPTIONIST': return 'Recepción';
+      case 'WAITER': return 'Mozo';
+      case 'KITCHEN': return 'Cocina';
+      case 'CASHIER': return 'Caja';
+      default: return primaryRole;
     }
   };
 
@@ -63,51 +46,60 @@ export function Header({ connected }: HeaderProps) {
         </div>
       </div>
 
-      {/* Header controls & Identity switcher */}
+      {/* Header controls & Identity status */}
       <div className="flex items-center gap-3">
-        {/* Actor Selector */}
-        <div className="hidden sm:flex items-center gap-2 bg-surface-1 border border-white/5 rounded-pill px-3 py-1.5 text-xs">
-          <span className="text-[11px] font-bold text-text-tertiary uppercase">Actor:</span>
-          <select
-            className="bg-transparent font-bold text-text-primary focus:outline-none cursor-pointer text-xs"
-            value={actorType}
-            onChange={(e) => handleActorTypeChange(e.target.value as ActorType)}
-          >
-            <option value="STAFF" className="bg-surface-2 text-text-primary">Personal (Staff)</option>
-            <option value="TABLE_DEVICE" className="bg-surface-2 text-text-primary">Tablet Mesa (Device)</option>
-            <option value="CUSTOMER" className="bg-surface-2 text-text-primary">Cliente (Móvil)</option>
-          </select>
-        </div>
+        {isAuthenticated && session ? (
+          <>
+            {/* Authenticated Actor Profile Badge */}
+            <div className="flex items-center gap-2.5 bg-surface-1 border border-white/5 rounded-pill px-3.5 py-1.5 text-xs shadow-sm">
+              <div className="w-6 h-6 rounded-full bg-amber/15 text-amber flex items-center justify-center">
+                {getActorIcon()}
+              </div>
+              <div className="flex flex-col text-left">
+                <div className="flex items-center gap-1.5 leading-none">
+                  <span className="font-bold text-text-primary text-[12px]">
+                    {session.actor.name || session.actor.email || session.actor.id.slice(0, 8)}
+                  </span>
+                  <span className="text-[9px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-amber/15 text-amber border border-amber/20">
+                    {getRoleLabel()}
+                  </span>
+                </div>
+                <span className="text-[10px] text-text-tertiary font-mono leading-none mt-1">
+                  Restaurante: {session.actor.restaurantId.slice(0, 8)}...
+                </span>
+              </div>
+            </div>
 
-        {/* Staff Role Selector */}
-        {actorType === 'STAFF' && (
-          <div className="hidden sm:flex items-center gap-2 bg-surface-1 border border-white/5 rounded-pill px-3 py-1.5 text-xs">
-            <span className="text-[11px] font-bold text-text-tertiary uppercase">Rol:</span>
-            <select
-              className="bg-transparent font-bold text-amber focus:outline-none cursor-pointer text-xs"
-              value={staffRole}
-              onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
+            {/* SSE Status */}
+            <div
+              className={`flex items-center gap-1.5 px-3 h-7 rounded-pill text-[11px] font-bold font-mono border transition ${
+                connected
+                  ? 'bg-emerald/15 border-emerald/30 text-emerald'
+                  : 'bg-white/5 border-white/10 text-text-tertiary'
+              }`}
             >
-              <option value="ADMIN" className="bg-surface-2 text-text-primary">Admin</option>
-              <option value="RECEPTIONIST" className="bg-surface-2 text-text-primary">Recepción</option>
-              <option value="WAITER" className="bg-surface-2 text-text-primary">Mozo</option>
-              <option value="KITCHEN" className="bg-surface-2 text-text-primary">Cocina</option>
-              <option value="CASHIER" className="bg-surface-2 text-text-primary">Caja</option>
-            </select>
+              <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald animate-pulse' : 'bg-text-tertiary'}`} />
+              <span>{connected ? 'LIVE SSE' : 'OFFLINE'}</span>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-surface-2 hover:bg-crimson/15 hover:text-crimson border border-white/10 hover:border-crimson/30 text-text-secondary text-xs font-semibold transition active:scale-95 cursor-pointer"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 h-7 rounded-pill text-[11px] font-bold font-mono bg-white/5 border border-white/10 text-text-tertiary">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary" />
+              <span>DESCONECTADO</span>
+            </div>
           </div>
         )}
-
-        {/* SSE Realtime Status Badge */}
-        <div
-          className={`flex items-center gap-1.5 px-3 h-7 rounded-pill text-[11px] font-bold font-mono border transition ${
-            connected
-              ? 'bg-emerald/15 border-emerald/30 text-emerald'
-              : 'bg-white/5 border-white/10 text-text-tertiary'
-          }`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald animate-pulse' : 'bg-text-tertiary'}`} />
-          <span>{connected ? 'LIVE SSE' : 'OFFLINE'}</span>
-        </div>
       </div>
     </header>
   );

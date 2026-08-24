@@ -1,7 +1,14 @@
-import { Review } from '@restaurant-os/domain';
+import {
+  Review,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { ReviewRepository } from '../../ports/review-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface CreateReviewInput {
   id: string;
@@ -9,6 +16,8 @@ export interface CreateReviewInput {
   customerId: string;
   rating: number;
   comment?: string | null;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CreateReviewUseCase {
@@ -31,12 +40,23 @@ export class CreateReviewUseCase {
     }
 
     await this.reviewRepo.save(reviewResult.value);
-    await this.eventPublisher.publish('REVIEW_CREATED', {
-      reviewId: reviewResult.value.id,
-      restaurantId: reviewResult.value.restaurantId,
-      customerId: reviewResult.value.customerId,
-      rating: reviewResult.value.rating,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.REVIEW_CREATED,
+        restaurantId: reviewResult.value.restaurantId,
+        aggregateType: 'Review',
+        aggregateId: reviewResult.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? input.customerId,
+        payload: {
+          reviewId: reviewResult.value.id,
+          restaurantId: reviewResult.value.restaurantId,
+          customerId: reviewResult.value.customerId,
+          rating: reviewResult.value.rating,
+        },
+      }),
+    );
 
     return ok(reviewResult.value);
   }

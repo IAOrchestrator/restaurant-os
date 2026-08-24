@@ -1,13 +1,22 @@
-import { Account } from '@restaurant-os/domain';
+import {
+  Account,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { AccountRepository } from '../../ports/account-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface RegisterPaymentInput {
   accountId: string;
   paymentId: string;
   amount: number;
   method: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class RegisterPaymentUseCase {
@@ -35,14 +44,26 @@ export class RegisterPaymentUseCase {
     }
 
     await this.accountRepo.save(updated.value);
-    await this.eventPublisher.publish('PAYMENT_REGISTERED', {
-      accountId: updated.value.id,
-      paymentId: input.paymentId,
-      amount: input.amount,
-      method: input.method,
-      remainingAmount: updated.value.remainingAmount,
-      isFullyPaid: updated.value.isFullyPaid,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.PAYMENT_REGISTERED,
+        restaurantId: updated.value.restaurantId,
+        aggregateType: 'Account',
+        aggregateId: updated.value.id,
+        tableSessionId: updated.value.tableSessionId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          accountId: updated.value.id,
+          paymentId: input.paymentId,
+          amount: input.amount,
+          method: input.method,
+          remainingAmount: updated.value.remainingAmount,
+          isFullyPaid: updated.value.isFullyPaid,
+        },
+      }),
+    );
 
     return ok(updated.value);
   }

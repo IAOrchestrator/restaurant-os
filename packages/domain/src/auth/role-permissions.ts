@@ -117,3 +117,18 @@ export const CUSTOMER_PERMISSIONS: Permission[] = [
   Permission.REVIEWS_CREATE,
   Permission.REVIEWS_READ,
 ];
+
+// TableDevice permissions (tablet on table)
+export const TABLE_DEVICE_PERMISSIONS: Permission[] = [
+  Permission.CATALOG_READ,
+  Permission.ORDERS_READ,
+  Permission.ORDERS_CREATE,
+  Permission.TABLE_SESSIONS_READ,
+  Permission.TABLE_DEVICES_READ,
+  Permission.ACCOUNTS_READ,
+  Permission.ACCOUNTS_REQUEST_PAYMENT,
+  Permission.SERVICE_TASKS_READ,
+  Permission.SERVICE_TASKS_MANAGE,
+  Permission.REVIEWS_READ,
+  Permission.REVIEWS_CREATE,
+];

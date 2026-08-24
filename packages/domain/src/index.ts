@@ -28,6 +28,7 @@ export * as Notification from './notification/index';
 export * as Analytics from './analytics/index';
 
 export * from './identity';
+export { Actor, ActorType, type ActorId } from './identity/actor';
 export * from './auth';
 export * from './inventory/raw-material';
 export * from './inventory/recipe';

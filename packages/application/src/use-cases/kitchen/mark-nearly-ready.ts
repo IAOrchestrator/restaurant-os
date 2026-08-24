@@ -1,9 +1,19 @@
-import { KitchenOrder, ok, err, type Result } from '@restaurant-os/domain';
+import {
+  KitchenOrder,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { KitchenOrderRepository } from '../../ports/kitchen-order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 
 export interface MarkNearlyReadyInput {
   kitchenOrderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class MarkNearlyReadyUseCase {
@@ -24,11 +34,22 @@ export class MarkNearlyReadyUseCase {
     }
 
     await this.kitchenOrderRepo.save(nearly.value);
-    await this.eventPublisher.publish('ORDER_NEARLY_READY', {
-      kitchenOrderId: nearly.value.id,
-      orderId: nearly.value.orderId,
-      restaurantId: nearly.value.restaurantId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ORDER_NEARLY_READY,
+        restaurantId: nearly.value.restaurantId,
+        aggregateType: 'KitchenOrder',
+        aggregateId: nearly.value.id,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          kitchenOrderId: nearly.value.id,
+          orderId: nearly.value.orderId,
+          restaurantId: nearly.value.restaurantId,
+        },
+      }),
+    );
 
     return ok(nearly.value);
   }

@@ -1,10 +1,19 @@
-import { Order } from '@restaurant-os/domain';
+import {
+  Order,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { OrderRepository } from '../../ports/order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface CancelOrderInput {
   orderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CancelOrderUseCase {
@@ -25,11 +34,23 @@ export class CancelOrderUseCase {
     }
 
     await this.orderRepo.save(cancelled.value);
-    await this.eventPublisher.publish('ORDER_CANCELLED', {
-      orderId: cancelled.value.id,
-      restaurantId: cancelled.value.restaurantId,
-      tableSessionId: cancelled.value.tableSessionId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ORDER_CANCELLED,
+        restaurantId: cancelled.value.restaurantId,
+        aggregateType: 'Order',
+        aggregateId: cancelled.value.id,
+        tableSessionId: cancelled.value.tableSessionId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          orderId: cancelled.value.id,
+          restaurantId: cancelled.value.restaurantId,
+          tableSessionId: cancelled.value.tableSessionId,
+        },
+      }),
+    );
 
     return ok(cancelled.value);
   }

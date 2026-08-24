@@ -1,10 +1,20 @@
-import { WaitlistEntry, WaitlistStatus } from '@restaurant-os/domain';
+import {
+  WaitlistEntry,
+  WaitlistStatus,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { WaitlistRepository } from '../../ports/waitlist-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface SeatCustomerInput {
   entryId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class SeatCustomerUseCase {
@@ -42,12 +52,23 @@ export class SeatCustomerUseCase {
     }
 
     await this.waitlistRepo.save(current);
-    await this.eventPublisher.publish('CUSTOMER_SEATED', {
-      entryId: current.id,
-      restaurantId: current.restaurantId,
-      customerId: current.customerId,
-      seatedAt: current.seatedAt?.toISOString(),
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_SEATED,
+        restaurantId: current.restaurantId,
+        aggregateType: 'WaitlistEntry',
+        aggregateId: current.id,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          entryId: current.id,
+          restaurantId: current.restaurantId,
+          customerId: current.customerId,
+          seatedAt: current.seatedAt?.toISOString(),
+        },
+      }),
+    );
 
     return ok(current);
   }

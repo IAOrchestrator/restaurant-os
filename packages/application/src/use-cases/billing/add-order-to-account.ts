@@ -1,12 +1,21 @@
-import { Account } from '@restaurant-os/domain';
+import {
+  Account,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { AccountRepository } from '../../ports/account-repository';
 import type { OrderRepository } from '../../ports/order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface AddOrderToAccountInput {
   accountId: string;
   orderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class AddOrderToAccountUseCase {
@@ -33,12 +42,24 @@ export class AddOrderToAccountUseCase {
     }
 
     await this.accountRepo.save(updated.value);
-    await this.eventPublisher.publish('ADDITIONAL_ORDER_CREATED', {
-      accountId: updated.value.id,
-      orderId: input.orderId,
-      amount: order.totalAmount,
-      newTotal: updated.value.totalAmount,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.ADDITIONAL_ORDER_CREATED,
+        restaurantId: updated.value.restaurantId,
+        aggregateType: 'Account',
+        aggregateId: updated.value.id,
+        tableSessionId: updated.value.tableSessionId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          accountId: updated.value.id,
+          orderId: input.orderId,
+          amount: order.totalAmount,
+          newTotal: updated.value.totalAmount,
+        },
+      }),
+    );
 
     return ok(updated.value);
   }

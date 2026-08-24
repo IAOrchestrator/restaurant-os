@@ -1,11 +1,20 @@
-import { TableSession } from '@restaurant-os/domain';
+import {
+  TableSession,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { TableSessionRepository } from '../../ports/table-session-repository';
 import type { TableRepository } from '../../ports/table-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface CloseTableSessionInput {
   sessionId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CloseTableSessionUseCase {
@@ -53,16 +62,50 @@ export class CloseTableSessionUseCase {
 
     await this.sessionRepo.save(closed.value);
     await this.tableRepo.save(released.value);
-    await this.eventPublisher.publish('TABLE_CLOSED', {
-      tableId: table.id,
-      sessionId: session.id,
-      restaurantId: table.restaurantId,
-    });
-    await this.eventPublisher.publish('TABLE_RELEASED', {
-      tableId: table.id,
-      sessionId: session.id,
-      restaurantId: table.restaurantId,
-    });
+
+    // 1. TABLE_CLOSED
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_CLOSED,
+        restaurantId: table.restaurantId,
+        aggregateType: 'TableSession',
+        aggregateId: session.id,
+        tableSessionId: session.id,
+        tableId: table.id,
+        tableNumber: table.number,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          tableId: table.id,
+          sessionId: session.id,
+          tableSessionId: session.id,
+          tableNumber: table.number,
+          restaurantId: table.restaurantId,
+        },
+      }),
+    );
+
+    // 2. TABLE_RELEASED
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_RELEASED,
+        restaurantId: table.restaurantId,
+        aggregateType: 'Table',
+        aggregateId: table.id,
+        tableSessionId: session.id,
+        tableId: table.id,
+        tableNumber: table.number,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          tableId: table.id,
+          tableNumber: table.number,
+          sessionId: session.id,
+          tableSessionId: session.id,
+          restaurantId: table.restaurantId,
+        },
+      }),
+    );
 
     return ok(closed.value);
   }

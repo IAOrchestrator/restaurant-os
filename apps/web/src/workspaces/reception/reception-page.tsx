@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { useAppContext, DEFAULT_WAITER_ID } from '../../hooks/useContextState';
+import { useAppContext } from '../../hooks/useContextState';
 import { useSse } from '../../hooks/useSse';
 import {
   Users,
@@ -56,7 +56,7 @@ export function ReceptionPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Selected waiter for opening tables
-  const [selectedWaiterId, setSelectedWaiterId] = useState<string>(DEFAULT_WAITER_ID);
+  const [selectedWaiterId, setSelectedWaiterId] = useState<string>('');
 
   // New waitlist modal / form state
   const [customerName, setCustomerName] = useState('');
@@ -77,8 +77,8 @@ export function ReceptionPage() {
     if (sessionsRes.data) setSessions(sessionsRes.data.filter((s) => s.status !== 'CLOSED'));
     if (staffRes.data) {
       setWaiters(staffRes.data);
-      if (!selectedWaiterId && staffRes.data.length > 0) {
-        setSelectedWaiterId(staffRes.data[0].id);
+      if (staffRes.data.length > 0) {
+        setSelectedWaiterId((prev) => prev || staffRes.data![0].id);
       }
     }
     if (waitlistRes.data) setWaitlist(waitlistRes.data);
@@ -87,15 +87,28 @@ export function ReceptionPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 4000);
-    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Real-time updates
   useSse({
     token: authToken,
-    eventTypes: ['TABLE_ASSIGNED', 'TABLE_RELEASED', 'TABLE_CLOSED', 'WAITLIST_JOINED', 'WAITLIST_SEATED'],
+    eventTypes: [
+      'CUSTOMER_JOINED_WAITLIST',
+      'CUSTOMER_CALLED',
+      'CUSTOMER_CONFIRMED',
+      'CUSTOMER_SEATED',
+      'CUSTOMER_CANCELLED_WAIT',
+      'CUSTOMER_SELECTED_TAKEAWAY',
+      'TABLE_ASSIGNED',
+      'TABLE_CHANGED',
+      'TABLE_RELEASED',
+      'TABLE_CLOSED',
+      'ACCOUNT_CLOSED',
+    ],
     onEvent: () => {
+      fetchData();
+    },
+    onReconnect: () => {
       fetchData();
     },
   });

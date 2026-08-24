@@ -1,10 +1,19 @@
-import { Table } from '@restaurant-os/domain';
+import {
+  Table,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { TableRepository } from '../../ports/table-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface AssignTableInput {
   tableId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class AssignTableUseCase {
@@ -25,11 +34,25 @@ export class AssignTableUseCase {
     }
 
     await this.tableRepo.save(assigned.value);
-    await this.eventPublisher.publish('TABLE_ASSIGNED', {
-      tableId: assigned.value.id,
-      restaurantId: assigned.value.restaurantId,
-      status: assigned.value.status,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_ASSIGNED,
+        restaurantId: assigned.value.restaurantId,
+        aggregateType: 'Table',
+        aggregateId: assigned.value.id,
+        tableId: assigned.value.id,
+        tableNumber: assigned.value.number,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          tableId: assigned.value.id,
+          tableNumber: assigned.value.number,
+          restaurantId: assigned.value.restaurantId,
+          status: assigned.value.status,
+        },
+      }),
+    );
 
     return ok(assigned.value);
   }

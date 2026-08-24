@@ -1,65 +1,95 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import React from 'react';
 import App from './App';
+
+const MOCK_RESTAURANT = 'a0000000-0000-0000-0000-000000000001';
+const MOCK_ADMIN_ID = '90000000-0000-0000-0000-000000000002';
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => [],
+  });
+});
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
 describe('Restaurant OS Web App & Workspaces', () => {
-  it('renders application header and workspace navigation tabs', () => {
+  it('renders application header and login form when unauthenticated', () => {
     render(<App />);
-    expect(screen.getByText('Restaurant OS')).toBeInTheDocument();
+    expect(screen.getAllByText('Restaurant OS').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('v0.1.0')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeInTheDocument();
+  });
+
+  it('renders workspace navigation and switches between allowed workspaces for authenticated Admin', async () => {
+    const adminSession = {
+      token: 'admin.jwt.token',
+      actor: {
+        id: MOCK_ADMIN_ID,
+        type: 'STAFF',
+        restaurantId: MOCK_RESTAURANT,
+        name: 'Administrador General',
+        roles: ['ADMIN'],
+      },
+    };
+    window.sessionStorage.setItem('restaurant_os_auth_session', JSON.stringify(adminSession));
+
+    render(<App />);
+
+    expect(screen.getByText('Administrador General')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Recepción & Mesas')).toBeInTheDocument();
     expect(screen.getByText('Mozo / Comandas')).toBeInTheDocument();
     expect(screen.getByText('Cocina (KDS)')).toBeInTheDocument();
-    expect(screen.getByText('Mesa (Tablet)')).toBeInTheDocument();
-    expect(screen.getAllByText(/Cliente \(Móvil\)/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Caja & Facturación/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Caja & Facturación')).toBeInTheDocument();
     expect(screen.getByText('Administración')).toBeInTheDocument();
-  });
 
-  it('switches between workspaces on navigation click', () => {
-    render(<App />);
-
-    // Default workspace: Reception
-    expect(screen.getByRole('heading', { name: /Recepción/i })).toBeInTheDocument();
-
-    // Click Dashboard
+    // Switch to Dashboard
     const dashboardTab = screen.getByText('Dashboard');
     fireEvent.click(dashboardTab);
-    expect(screen.getByRole('heading', { name: /Dashboard Operativo en Vivo/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Dashboard Operativo en Vivo/i })).toBeInTheDocument();
+    });
 
-    // Click Cocina (KDS)
+    // Switch to Cocina (KDS)
     const kitchenTab = screen.getByText('Cocina (KDS)');
     fireEvent.click(kitchenTab);
-    expect(screen.getByRole('heading', { name: /Cocina/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Cocina/i })).toBeInTheDocument();
+    });
 
-    // Click Mesa (Tablet)
-    const tableTab = screen.getByText('Mesa (Tablet)');
-    fireEvent.click(tableTab);
-    expect(screen.getByRole('heading', { name: /Menú Interactivo en Mesa/i })).toBeInTheDocument();
-
-    // Click Mozo
+    // Switch to Mozo
     const waiterTab = screen.getByText('Mozo / Comandas');
     fireEvent.click(waiterTab);
-    expect(screen.getByRole('heading', { name: /Mozo/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Mozo/i })).toBeInTheDocument();
+    });
 
-    // Click Caja
+    // Switch to Caja
     const cashierTab = screen.getByText('Caja & Facturación');
     fireEvent.click(cashierTab);
-    expect(screen.getByRole('heading', { name: /Caja & Facturación/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Caja & Facturación/i })).toBeInTheDocument();
+    });
 
-    // Click Admin
+    // Switch to Admin
     const adminTab = screen.getByText('Administración');
     fireEvent.click(adminTab);
-    expect(screen.getByRole('heading', { name: /Panel de Administración/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Panel de Administración/i })).toBeInTheDocument();
+    });
   });
 });

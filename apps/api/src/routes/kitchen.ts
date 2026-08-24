@@ -18,19 +18,41 @@ import {
   CompleteKitchenOrderUseCase,
   AssignKitchenOrderUseCase,
   type KitchenOrderRepository,
+  type OrderRepository,
+  type TableSessionRepository,
+  type TableRepository,
   type EventPublisher,
+  type TransactionRunner,
 } from '@restaurant-os/application';
 
 export interface KitchenRoutesOptions {
   kitchenOrderRepo: KitchenOrderRepository;
   eventPublisher: EventPublisher;
+  orderRepo?: OrderRepository;
+  sessionRepo?: TableSessionRepository;
+  tableRepo?: TableRepository;
+  txRunner?: TransactionRunner;
 }
 
 export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOptions) {
   const createUseCase = new CreateKitchenOrderUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
-  const startUseCase = new StartKitchenOrderUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
+  const startUseCase = new StartKitchenOrderUseCase(
+    opts.kitchenOrderRepo,
+    opts.eventPublisher,
+    opts.orderRepo,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
   const nearlyUseCase = new MarkNearlyReadyUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
-  const readyUseCase = new MarkKitchenOrderReadyUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
+  const readyUseCase = new MarkKitchenOrderReadyUseCase(
+    opts.kitchenOrderRepo,
+    opts.eventPublisher,
+    opts.orderRepo,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
   const completeUseCase = new CompleteKitchenOrderUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
   const assignUseCase = new AssignKitchenOrderUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
 
@@ -158,7 +180,11 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
   // Handler: start
   const startHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const result = await startUseCase.execute({ kitchenOrderId: id });
+    const result = await startUseCase.execute({
+      kitchenOrderId: id,
+      actorType: request.actor?.type,
+      actorId: request.actor?.id,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
@@ -212,7 +238,11 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
   // Handler: ready
   const readyHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const result = await readyUseCase.execute({ kitchenOrderId: id });
+    const result = await readyUseCase.execute({
+      kitchenOrderId: id,
+      actorType: request.actor?.type,
+      actorId: request.actor?.id,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }

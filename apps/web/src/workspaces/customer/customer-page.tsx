@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { useAppContext, DEFAULT_CUSTOMER_ID } from '../../hooks/useContextState';
+import { useAppContext } from '../../hooks/useContextState';
 import { useSse } from '../../hooks/useSse';
 import {
   Sparkles,
@@ -43,9 +43,22 @@ export function CustomerPage() {
   // Real-time SSE
   useSse({
     token: authToken,
-    eventTypes: ['ORDER_SENT_TO_KITCHEN', 'ORDER_READY', 'ORDER_DELIVERED'],
+    eventTypes: [
+      'CUSTOMER_CALLED',
+      'CUSTOMER_CONFIRMED',
+      'CUSTOMER_SEATED',
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'PAYMENT_REGISTERED',
+      'ACCOUNT_CLOSED',
+    ],
     onEvent: () => {
-      // live updates
+      fetchMenu();
+    },
+    onReconnect: () => {
+      fetchMenu();
     },
   });
 
@@ -57,7 +70,7 @@ export function CustomerPage() {
       method: 'POST',
       body: JSON.stringify({
         restaurantId,
-        customerId: actorId || DEFAULT_CUSTOMER_ID,
+        customerId: actorId,
         score: rating,
         comment: comment.trim() || undefined,
       }),

@@ -20,13 +20,21 @@ import {
   CancelOrderUseCase,
   type OrderRepository,
   type PreOrderRepository,
+  type KitchenOrderRepository,
+  type TableSessionRepository,
+  type TableRepository,
   type EventPublisher,
+  type TransactionRunner,
 } from '@restaurant-os/application';
 
 export interface OrderRoutesOptions {
   orderRepo: OrderRepository;
   preOrderRepo: PreOrderRepository;
   eventPublisher: EventPublisher;
+  kitchenOrderRepo?: KitchenOrderRepository;
+  sessionRepo?: TableSessionRepository;
+  tableRepo?: TableRepository;
+  txRunner?: TransactionRunner;
 }
 
 export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions) {
@@ -35,10 +43,24 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
     opts.preOrderRepo,
     opts.eventPublisher,
   );
-  const sendToKitchenUseCase = new SendToKitchenUseCase(opts.orderRepo, opts.eventPublisher);
+  const sendToKitchenUseCase = new SendToKitchenUseCase(
+    opts.orderRepo,
+    opts.eventPublisher,
+    opts.kitchenOrderRepo,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
   const startPreparingUseCase = new StartPreparingUseCase(opts.orderRepo, opts.eventPublisher);
   const markReadyUseCase = new MarkOrderReadyUseCase(opts.orderRepo, opts.eventPublisher);
-  const deliverUseCase = new DeliverOrderUseCase(opts.orderRepo, opts.eventPublisher);
+  const deliverUseCase = new DeliverOrderUseCase(
+    opts.orderRepo,
+    opts.eventPublisher,
+    opts.kitchenOrderRepo,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
   const cancelUseCase = new CancelOrderUseCase(opts.orderRepo, opts.eventPublisher);
 
   // POST /api/orders
@@ -54,6 +76,20 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
       const parsed = CreateOrderSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: parsed.error.format() });
+      }
+
+      // Enforce fine-grained contextual scoping for TABLE_DEVICE and CUSTOMER
+      const scoper = request.resourceScoper;
+      if (scoper && (request.actor.isTableDevice() || request.actor.isCustomer())) {
+        const sessionScope = await scoper.getScope(request.actor, 'table-session');
+        if (sessionScope.isOwn() && sessionScope.resourceIds !== null) {
+          if (!sessionScope.canAccess(parsed.data.tableSessionId)) {
+            return reply.status(403).send({
+              error: 'Forbidden',
+              message: `Access denied to table session outside actor scope: ${parsed.data.tableSessionId}`,
+            });
+          }
+        }
       }
 
       const result = await createUseCase.execute({
@@ -150,7 +186,11 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
   // Handler: send-to-kitchen
   const sendToKitchenHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const result = await sendToKitchenUseCase.execute({ orderId: id });
+    const result = await sendToKitchenUseCase.execute({
+      orderId: id,
+      actorType: request.actor?.type,
+      actorId: request.actor?.id,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
@@ -216,7 +256,11 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
   // Handler: deliver
   const deliverHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
-    const result = await deliverUseCase.execute({ orderId: id });
+    const result = await deliverUseCase.execute({
+      orderId: id,
+      actorType: request.actor?.type,
+      actorId: request.actor?.id,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }

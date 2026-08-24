@@ -108,11 +108,12 @@ describe('EventLog', () => {
     }
   });
 
-  it('should support all 33 event types including new ones', () => {
+  it('should support all 34 event types including new ones', () => {
     const eventTypes = Object.values(EventType);
-    expect(eventTypes).toHaveLength(33);
+    expect(eventTypes).toHaveLength(34);
     expect(eventTypes).toContain(EventType.CUSTOMER_JOINED_WAITLIST);
     expect(eventTypes).toContain(EventType.PAYMENT_REGISTERED);
+    expect(eventTypes).toContain(EventType.ACCOUNT_CLOSED);
     expect(eventTypes).toContain(EventType.REVIEW_CREATED);
     expect(eventTypes).toContain(EventType.CUSTOMER_REMOVED_FROM_TABLE);
     expect(eventTypes).toContain(EventType.TABLE_CHANGED);

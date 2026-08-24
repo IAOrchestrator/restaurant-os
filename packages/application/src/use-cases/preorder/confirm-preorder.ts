@@ -1,10 +1,19 @@
-import { PreOrder } from '@restaurant-os/domain';
+import {
+  PreOrder,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { PreOrderRepository } from '../../ports/preorder-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface ConfirmPreOrderInput {
   preOrderId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class ConfirmPreOrderUseCase {
@@ -30,11 +39,22 @@ export class ConfirmPreOrderUseCase {
     if (!confirmed.success) return err(confirmed.error);
 
     await this.preOrderRepo.save(confirmed.value);
-    await this.eventPublisher.publish('PREORDER_UPDATED', {
-      preOrderId: confirmed.value.id,
-      restaurantId: confirmed.value.restaurantId,
-      status: confirmed.value.status,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.PREORDER_UPDATED,
+        restaurantId: confirmed.value.restaurantId,
+        aggregateType: 'PreOrder',
+        aggregateId: confirmed.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? confirmed.value.customerId,
+        payload: {
+          preOrderId: confirmed.value.id,
+          restaurantId: confirmed.value.restaurantId,
+          status: confirmed.value.status,
+        },
+      }),
+    );
 
     return ok(confirmed.value);
   }

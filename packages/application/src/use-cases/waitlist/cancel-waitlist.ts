@@ -1,10 +1,19 @@
-import { WaitlistEntry } from '@restaurant-os/domain';
+import {
+  WaitlistEntry,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { WaitlistRepository } from '../../ports/waitlist-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
-import { ok, err, type Result } from '@restaurant-os/domain';
 
 export interface CancelWaitlistInput {
   entryId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class CancelWaitlistUseCase {
@@ -25,12 +34,22 @@ export class CancelWaitlistUseCase {
     }
 
     await this.waitlistRepo.save(cancelled.value);
-    await this.eventPublisher.publish('CUSTOMER_CANCELLED_WAIT', {
-      entryId: cancelled.value.id,
-      restaurantId: cancelled.value.restaurantId,
-      customerId: cancelled.value.customerId,
-      cancelledAt: cancelled.value.cancelledAt?.toISOString(),
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.CUSTOMER_CANCELLED_WAIT,
+        restaurantId: cancelled.value.restaurantId,
+        aggregateType: 'WaitlistEntry',
+        aggregateId: cancelled.value.id,
+        actorType: input.actorType ?? ActorType.CUSTOMER,
+        actorId: input.actorId ?? cancelled.value.customerId,
+        payload: {
+          entryId: cancelled.value.id,
+          restaurantId: cancelled.value.restaurantId,
+          customerId: cancelled.value.customerId,
+        },
+      }),
+    );
 
     return ok(cancelled.value);
   }

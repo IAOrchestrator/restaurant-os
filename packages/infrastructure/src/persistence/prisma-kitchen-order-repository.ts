@@ -1,17 +1,22 @@
 import { KitchenOrder, type KitchenOrderId } from '@restaurant-os/domain';
 import type { KitchenOrderRepository } from '@restaurant-os/application';
+import { PrismaClient, Prisma } from '@restaurant-os/database';
 import { prisma } from './prisma-client';
 import { KitchenOrderMapper } from './mappers/kitchen-order-mapper';
 
 export class PrismaKitchenOrderRepository implements KitchenOrderRepository {
+  constructor(
+    private readonly db: PrismaClient | Prisma.TransactionClient = prisma,
+  ) {}
+
   async findById(id: KitchenOrderId): Promise<KitchenOrder | null> {
-    const prismaOrder = await prisma.kitchenOrder.findUnique({ where: { id } });
+    const prismaOrder = await this.db.kitchenOrder.findUnique({ where: { id } });
     if (!prismaOrder) return null;
     return KitchenOrderMapper.toDomain(prismaOrder);
   }
 
   async findByOrderId(orderId: string): Promise<KitchenOrder | null> {
-    const prismaOrder = await prisma.kitchenOrder.findUnique({ where: { orderId } });
+    const prismaOrder = await this.db.kitchenOrder.findUnique({ where: { orderId } });
     if (!prismaOrder) return null;
     return KitchenOrderMapper.toDomain(prismaOrder);
   }
@@ -19,7 +24,7 @@ export class PrismaKitchenOrderRepository implements KitchenOrderRepository {
   async findByRestaurantId(restaurantId: string, status?: string): Promise<KitchenOrder[]> {
     const where: Record<string, unknown> = { restaurantId };
     if (status) where.status = status;
-    const prismaOrders = await prisma.kitchenOrder.findMany({
+    const prismaOrders = await this.db.kitchenOrder.findMany({
       where,
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
@@ -29,7 +34,7 @@ export class PrismaKitchenOrderRepository implements KitchenOrderRepository {
   }
 
   async findByAssignedTo(staffId: string): Promise<KitchenOrder[]> {
-    const prismaOrders = await prisma.kitchenOrder.findMany({
+    const prismaOrders = await this.db.kitchenOrder.findMany({
       where: { assignedTo: staffId },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
@@ -40,7 +45,7 @@ export class PrismaKitchenOrderRepository implements KitchenOrderRepository {
 
   async save(kitchenOrder: KitchenOrder): Promise<void> {
     const data = KitchenOrderMapper.toPrisma(kitchenOrder);
-    await prisma.kitchenOrder.upsert({
+    await this.db.kitchenOrder.upsert({
       where: { id: kitchenOrder.id },
       update: data as any,
       create: data as any,
@@ -48,6 +53,6 @@ export class PrismaKitchenOrderRepository implements KitchenOrderRepository {
   }
 
   async delete(id: KitchenOrderId): Promise<void> {
-    await prisma.kitchenOrder.delete({ where: { id } });
+    await this.db.kitchenOrder.delete({ where: { id } });
   }
 }

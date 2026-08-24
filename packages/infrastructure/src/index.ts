@@ -2,6 +2,7 @@
 // This is the ONLY layer that knows about Prisma, Fastify, PostgreSQL, etc.
 
 export * from './persistence/prisma-client';
+export * from './persistence/prisma-transaction-runner';
 export * from './persistence/prisma-table-repository';
 export * from './persistence/prisma-table-session-repository';
 export * from './persistence/prisma-waitlist-repository';

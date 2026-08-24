@@ -1,9 +1,11 @@
-import { TableDevice, EventType } from '@restaurant-os/domain';
+import { TableDevice, EventType, ActorType, createDomainEvent } from '@restaurant-os/domain';
 import type { TableDeviceRepository } from '../../ports/table-device-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 
 export interface DisassociateTableDeviceInput {
   deviceId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class DisassociateTableDeviceUseCase {
@@ -26,13 +28,22 @@ export class DisassociateTableDeviceUseCase {
 
     await this.deviceRepo.save(device);
 
-    await this.eventPublisher.publish(EventType.TABLE_DEVICE_DISASSOCIATED, {
-      deviceId: device.id,
-      restaurantId: device.restaurantId,
-      previousTableId,
-      aggregateType: 'TableDevice',
-      aggregateId: device.id,
-    });
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_DEVICE_DISASSOCIATED,
+        restaurantId: device.restaurantId,
+        aggregateType: 'TableDevice',
+        aggregateId: device.id,
+        tableId: previousTableId,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          deviceId: device.id,
+          restaurantId: device.restaurantId,
+          previousTableId,
+        },
+      }),
+    );
 
     return device;
   }

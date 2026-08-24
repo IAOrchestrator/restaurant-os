@@ -1,6 +1,5 @@
-import type { EventPublisher } from '@restaurant-os/application';
-import type { EventLogRepository } from '@restaurant-os/application';
-import { EventLog } from '@restaurant-os/domain';
+import type { EventPublisher, EventLogRepository } from '@restaurant-os/application';
+import { EventLog, type DomainEvent, EventType } from '@restaurant-os/domain';
 import { randomUUID } from 'crypto';
 
 export class PersistingEventPublisher implements EventPublisher {
@@ -9,21 +8,62 @@ export class PersistingEventPublisher implements EventPublisher {
     private readonly delegate?: EventPublisher,
   ) {}
 
-  async publish(eventType: string, payload: Record<string, unknown>): Promise<void> {
-    const restaurantId = (payload.restaurantId as string) || 'system';
-    const aggregateId = (payload.aggregateId as string)
-      || (payload.accountId as string)
-      || (payload.orderId as string)
-      || (payload.tableSessionId as string)
-      || (payload.id as string)
-      || 'system';
-    const aggregateType = this.inferAggregateType(eventType, payload);
-    const tableSessionId = (payload.tableSessionId as string) || null;
-    const actorType = (payload.actorType as string) || null;
-    const actorId = (payload.actorId as string) || null;
+  async publish<T = Record<string, unknown>>(
+    eventOrType: DomainEvent<T> | EventType | string,
+    legacyPayload?: Record<string, unknown>,
+  ): Promise<void> {
+    let eventId: string;
+    let eventType: string;
+    let restaurantId: string;
+    let aggregateType: string;
+    let aggregateId: string;
+    let tableSessionId: string | null = null;
+    let actorType: string | null = null;
+    let actorId: string | null = null;
+    let timestamp: Date;
+    let payload: Record<string, unknown>;
+
+    if (typeof eventOrType === 'object' && eventOrType !== null && 'type' in eventOrType && 'payload' in eventOrType) {
+      // Canonical DomainEvent<T> branch
+      const domainEvent = eventOrType as DomainEvent<T>;
+      eventId = domainEvent.id || randomUUID();
+      eventType = domainEvent.type;
+      restaurantId = domainEvent.restaurantId;
+      aggregateType = domainEvent.aggregateType;
+      aggregateId = domainEvent.aggregateId;
+      tableSessionId = domainEvent.tableSessionId ?? null;
+      actorType = domainEvent.actorType ?? null;
+      actorId = domainEvent.actorId ?? null;
+      timestamp = new Date(domainEvent.timestamp);
+      payload = {
+        ...(domainEvent.payload as Record<string, unknown>),
+        tableId: domainEvent.tableId ?? (domainEvent.payload as any)?.tableId,
+        tableNumber: domainEvent.tableNumber ?? (domainEvent.payload as any)?.tableNumber,
+        tableSessionId: domainEvent.tableSessionId ?? (domainEvent.payload as any)?.tableSessionId,
+        restaurantId: domainEvent.restaurantId,
+      };
+    } else {
+      // Transitional legacy branch
+      eventType = eventOrType as string;
+      const rawPayload = legacyPayload ?? {};
+      eventId = randomUUID();
+      restaurantId = (rawPayload.restaurantId as string) || 'system';
+      aggregateId = (rawPayload.aggregateId as string)
+        || (rawPayload.accountId as string)
+        || (rawPayload.orderId as string)
+        || (rawPayload.tableSessionId as string)
+        || (rawPayload.id as string)
+        || 'system';
+      aggregateType = this.inferAggregateType(eventType, rawPayload);
+      tableSessionId = (rawPayload.tableSessionId as string) || null;
+      actorType = (rawPayload.actorType as string) || null;
+      actorId = (rawPayload.actorId as string) || null;
+      timestamp = new Date();
+      payload = rawPayload;
+    }
 
     const eventResult = EventLog.create({
-      id: randomUUID(),
+      id: eventId,
       eventType,
       restaurantId,
       aggregateType,
@@ -32,7 +72,7 @@ export class PersistingEventPublisher implements EventPublisher {
       actorType,
       actorId,
       payload,
-      timestamp: new Date(),
+      timestamp,
     });
 
     if (eventResult.success) {

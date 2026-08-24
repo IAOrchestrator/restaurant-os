@@ -22,10 +22,12 @@ import {
   PrismaEventLogRepository,
   PrismaKitchenOrderRepository,
   PrismaServiceTaskRepository,
+  PrismaTransactionRunner,
   PersistingEventPublisher,
   EventBroadcaster,
   SseEventPublisher,
   setupAuth,
+  Argon2PasswordHasher,
 } from '@restaurant-os/infrastructure';
 import { healthRoutes } from './routes/health';
 import { versionRoutes } from './routes/version';
@@ -99,8 +101,40 @@ async function bootstrap() {
     return activeSession?.id ?? null;
   };
 
+  const getTableDeviceTableId = async (tableDeviceId: string): Promise<string | null> => {
+    const device = await prisma.tableDevice.findUnique({
+      where: { id: tableDeviceId },
+      select: { tableId: true },
+    });
+    return device?.tableId ?? null;
+  };
+
+  const getCustomerSessionIds = async (customerId: string): Promise<string[]> => {
+    const sessions = await prisma.tableSession.findMany({
+      where: { status: { not: 'CLOSED' } },
+      select: { id: true, customerIds: true },
+    });
+    return sessions
+      .filter((s: { id: string; customerIds: string | null }) => {
+        if (!s.customerIds) return false;
+        try {
+          const parsed = JSON.parse(s.customerIds);
+          return Array.isArray(parsed) && parsed.includes(customerId);
+        } catch {
+          return false;
+        }
+      })
+      .map((s: { id: string }) => s.id);
+  };
+
   const permissionChecker = new RoleBasedPermissionChecker(getStaffRoles);
-  const resourceScoper = new OperationalResourceScoper(getWaiterTableSessionIds, getTableDeviceSessionId, getStaffRoles);
+  const resourceScoper = new OperationalResourceScoper(
+    getWaiterTableSessionIds,
+    getTableDeviceSessionId,
+    getStaffRoles,
+    getTableDeviceTableId,
+    getCustomerSessionIds,
+  );
 
   const jwtService = new JwtService(config.jwtSecret);
 
@@ -127,28 +161,56 @@ async function bootstrap() {
   const kitchenOrderRepo = new PrismaKitchenOrderRepository();
   const serviceTaskRepo = new PrismaServiceTaskRepository();
   const broadcaster = new EventBroadcaster();
+  const txRunner = new PrismaTransactionRunner();
   const eventPublisher = new PersistingEventPublisher(
     eventLogRepo,
     new SseEventPublisher(broadcaster),
   );
 
+  const credentialHasher = new Argon2PasswordHasher();
+
   // Register routes with their dependencies
   await app.register(healthRoutes, { prefix: '/health' });
   await app.register(versionRoutes, { prefix: '/version' });
-  await app.register(authRoutes, { prefix: '/api/auth', jwtService });
+  await app.register(authRoutes, { prefix: '/api/auth', jwtService, credentialHasher });
   await app.register(tableRoutes, { prefix: '/api/tables', tableRepo, sessionRepo, eventPublisher });
-  await app.register(tableSessionRoutes, { prefix: '/api/table-sessions', tableRepo, sessionRepo, eventPublisher });
+  await app.register(tableSessionRoutes, { prefix: '/api/table-sessions', tableRepo, sessionRepo, eventPublisher, txRunner });
   await app.register(tableDeviceRoutes, { prefix: '/api/table-devices', deviceRepo: tableDeviceRepo, tableRepo, sessionRepo, eventPublisher });
   await app.register(waitlistRoutes, { prefix: '/api/waitlist', waitlistRepo, eventPublisher });
   await app.register(preOrderRoutes, { prefix: '/api/preorders', preOrderRepo, eventPublisher });
-  await app.register(orderRoutes, { prefix: '/api/orders', orderRepo, preOrderRepo, eventPublisher });
-  await app.register(billingRoutes, { prefix: '/api/billing', accountRepo, orderRepo, eventPublisher });
+  await app.register(orderRoutes, {
+    prefix: '/api/orders',
+    orderRepo,
+    preOrderRepo,
+    kitchenOrderRepo,
+    sessionRepo,
+    tableRepo,
+    eventPublisher,
+    txRunner,
+  });
+  await app.register(billingRoutes, {
+    prefix: '/api/billing',
+    accountRepo,
+    orderRepo,
+    sessionRepo,
+    tableRepo,
+    eventPublisher,
+    txRunner,
+  });
   await app.register(catalogRoutes, { prefix: '/api/catalog', categoryRepo, productRepo, eventPublisher });
   await app.register(customerRoutes, { prefix: '/api/customers', customerRepo });
   await app.register(reviewRoutes, { prefix: '/api/reviews', reviewRepo, eventPublisher });
   await app.register(eventRoutes, { prefix: '/api/events', eventLogRepo });
   await app.register(sseRoutes, { prefix: '/api/events', broadcaster, jwtService });
-  await app.register(kitchenRoutes, { prefix: '/api/kitchen', kitchenOrderRepo, eventPublisher });
+  await app.register(kitchenRoutes, {
+    prefix: '/api/kitchen',
+    kitchenOrderRepo,
+    orderRepo,
+    sessionRepo,
+    tableRepo,
+    eventPublisher,
+    txRunner,
+  });
   await app.register(serviceRoutes, { prefix: '/api/service', serviceTaskRepo, eventPublisher });
   await app.register(staffRoutes, { prefix: '/api/staff' });
   await app.register(analyticsRoutes, { prefix: '/api/analytics' });

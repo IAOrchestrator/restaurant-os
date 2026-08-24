@@ -38,13 +38,16 @@ model Restaurant {
 }
 
 model Staff {
-  id           String     @id @default(uuid())
-  restaurantId String
-  name         String
-  email        String
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                String     @id @default(uuid())
+  restaurantId      String
+  name              String
+  email             String
+  passwordHash      String?
+  pinCodeHash       String?
+  passwordUpdatedAt DateTime?
+  active            Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   restaurant Restaurant            @relation(fields: [restaurantId], references: [id])
   roles      StaffRoleAssignment[]
@@ -98,13 +101,15 @@ model Table {
 }
 
 model TableDevice {
-  id           String   @id @default(uuid())
-  restaurantId String
-  tableId      String?  @unique
-  name         String
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String    @id @default(uuid())
+  restaurantId     String
+  tableId          String?   @unique
+  name             String
+  deviceSecretHash String?
+  secretUpdatedAt  DateTime?
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
   table      Table?     @relation(fields: [tableId], references: [id])

@@ -1,10 +1,20 @@
-import { KitchenOrder, ok, err, type Result } from '@restaurant-os/domain';
+import {
+  KitchenOrder,
+  EventType,
+  ActorType,
+  createDomainEvent,
+  ok,
+  err,
+  type Result,
+} from '@restaurant-os/domain';
 import type { KitchenOrderRepository } from '../../ports/kitchen-order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 
 export interface AssignKitchenOrderInput {
   kitchenOrderId: string;
   staffId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class AssignKitchenOrderUseCase {
@@ -25,12 +35,23 @@ export class AssignKitchenOrderUseCase {
     }
 
     await this.kitchenOrderRepo.save(assigned.value);
-    await this.eventPublisher.publish('KITCHEN_ORDER_ASSIGNED', {
-      kitchenOrderId: assigned.value.id,
-      orderId: assigned.value.orderId,
-      assignedTo: input.staffId,
-      restaurantId: assigned.value.restaurantId,
-    });
+
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.KITCHEN_ORDER_ASSIGNED,
+        restaurantId: assigned.value.restaurantId,
+        aggregateType: 'KitchenOrder',
+        aggregateId: assigned.value.id,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? input.staffId,
+        payload: {
+          kitchenOrderId: assigned.value.id,
+          orderId: assigned.value.orderId,
+          assignedTo: input.staffId,
+          restaurantId: assigned.value.restaurantId,
+        },
+      }),
+    );
 
     return ok(assigned.value);
   }

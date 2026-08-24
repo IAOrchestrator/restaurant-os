@@ -52,15 +52,16 @@ export function CashierPage() {
 
   useEffect(() => {
     fetchAccounts();
-    const interval = setInterval(fetchAccounts, 5000);
-    return () => clearInterval(interval);
   }, [fetchAccounts]);
 
-  // Real-time SSE
+  // Real-time SSE & snapshot on reconnect
   useSse({
     token: authToken,
-    eventTypes: ['PAYMENT_REGISTERED', 'ACCOUNT_CLOSED', 'ORDER_DELIVERED', 'SERVICE_TASK_CREATED'],
+    eventTypes: ['TABLE_ASSIGNED', 'ORDER_DELIVERED', 'ACCOUNT_REQUESTED', 'PAYMENT_REGISTERED', 'ACCOUNT_CLOSED', 'TABLE_CLOSED'],
     onEvent: () => {
+      fetchAccounts();
+    },
+    onReconnect: () => {
       fetchAccounts();
     },
   });

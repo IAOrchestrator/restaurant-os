@@ -1,11 +1,16 @@
 import { Account, type AccountId } from '@restaurant-os/domain';
 import type { AccountRepository } from '@restaurant-os/application';
+import { PrismaClient, Prisma } from '@restaurant-os/database';
 import { prisma } from './prisma-client';
 import { AccountMapper } from './mappers/account-mapper';
 
 export class PrismaAccountRepository implements AccountRepository {
+  constructor(
+    private readonly db: PrismaClient | Prisma.TransactionClient = prisma,
+  ) {}
+
   async findById(id: AccountId): Promise<Account | null> {
-    const prismaAccount = await prisma.account.findUnique({
+    const prismaAccount = await this.db.account.findUnique({
       where: { id },
       include: { payments: true },
     });
@@ -14,7 +19,7 @@ export class PrismaAccountRepository implements AccountRepository {
   }
 
   async findByTableSessionId(tableSessionId: string): Promise<Account | null> {
-    const prismaAccount = await prisma.account.findFirst({
+    const prismaAccount = await this.db.account.findFirst({
       where: { tableSessionId },
       include: { payments: true },
     });
@@ -23,7 +28,7 @@ export class PrismaAccountRepository implements AccountRepository {
   }
 
   async findByRestaurantId(restaurantId: string): Promise<Account[]> {
-    const prismaAccounts = await prisma.account.findMany({
+    const prismaAccounts = await this.db.account.findMany({
       where: { restaurantId },
       include: { payments: true },
       orderBy: { createdAt: 'desc' },
@@ -35,7 +40,7 @@ export class PrismaAccountRepository implements AccountRepository {
 
   async save(account: Account): Promise<void> {
     const data = AccountMapper.toPrisma(account);
-    await prisma.account.upsert({
+    await this.db.account.upsert({
       where: { id: account.id },
       update: data,
       create: data,

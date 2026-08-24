@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { useAppContext, DEFAULT_WAITER_ID } from '../../hooks/useContextState';
+import { useAppContext } from '../../hooks/useContextState';
 import { useSse } from '../../hooks/useSse';
 import {
   Bell,
@@ -57,7 +57,7 @@ export interface ServiceTaskItem {
 }
 
 export function WaiterPage() {
-  const { restaurantId, actorId, setActorId, authToken } = useAppContext();
+  const { restaurantId, actorId, authToken } = useAppContext();
   const { request } = useApi();
   const [sessions, setSessions] = useState<TableSessionItem[]>([]);
   const [tables, setTables] = useState<TableItem[]>([]);
@@ -74,7 +74,7 @@ export function WaiterPage() {
   const [targetWaiterId, setTargetWaiterId] = useState<string>('');
 
   // Active waiter in this terminal
-  const [currentWaiterId, setCurrentWaiterId] = useState<string>(actorId || DEFAULT_WAITER_ID);
+  const [currentWaiterId, setCurrentWaiterId] = useState<string>(actorId || '');
   const [tableFilter, setTableFilter] = useState<'MINE' | 'ALL'>('MINE');
 
   const fetchData = useCallback(async () => {
@@ -109,8 +109,6 @@ export function WaiterPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 4000);
-    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Sync waiter terminal
@@ -123,10 +121,22 @@ export function WaiterPage() {
   // Real-time SSE Alerts
   useSse({
     token: authToken,
-    eventTypes: ['ORDER_READY', 'SERVICE_TASK_CREATED', 'TABLE_ASSIGNED', 'WAITER_CHANGED', 'TABLE_CLOSED'],
+    eventTypes: [
+      'TABLE_ASSIGNED',
+      'TABLE_CHANGED',
+      'WAITER_CHANGED',
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_NEARLY_READY',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'SERVICE_TASK_CREATED',
+      'TABLE_CLOSED',
+      'ACCOUNT_CLOSED',
+    ],
     onEvent: (event) => {
       fetchData();
-      if (event.type === 'ORDER_READY' || event.type === 'KITCHEN_ORDER_READY') {
+      if (event.type === 'ORDER_READY') {
         const tableNum = (event.payload as any)?.tableNumber || 1;
         setReadyAlert({
           taskOrOrderId: (event.payload as any)?.orderId || 'order-1',
@@ -134,6 +144,9 @@ export function WaiterPage() {
           text: `¡Plato Listo para Mesa ${tableNum}!`,
         });
       }
+    },
+    onReconnect: () => {
+      fetchData();
     },
   });
 
@@ -151,7 +164,6 @@ export function WaiterPage() {
 
   const handleSelectWaiterTerminal = (waiterId: string) => {
     setCurrentWaiterId(waiterId);
-    setActorId(waiterId);
   };
 
   const filteredSessions = (sessions || []).filter((s) => {

@@ -1,4 +1,4 @@
-import { Actor, Permission, StaffRole, ROLE_PERMISSIONS, CUSTOMER_PERMISSIONS } from '@restaurant-os/domain';
+import { Actor, Permission, StaffRole, ROLE_PERMISSIONS, CUSTOMER_PERMISSIONS, TABLE_DEVICE_PERMISSIONS } from '@restaurant-os/domain';
 
 export interface PermissionChecker {
   hasPermission(actor: Actor, permission: Permission): Promise<boolean>;
@@ -13,6 +13,9 @@ export class RoleBasedPermissionChecker implements PermissionChecker {
     if (actor.isSystem()) return true;
     if (actor.isCustomer()) {
       return CUSTOMER_PERMISSIONS.includes(permission);
+    }
+    if (actor.isTableDevice()) {
+      return TABLE_DEVICE_PERMISSIONS.includes(permission);
     }
     if (actor.isStaff()) {
       const roles = await this.getStaffRoles(actor.id);

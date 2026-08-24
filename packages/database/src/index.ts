@@ -1,8 +1,8 @@
 // Database package — single source of truth for Prisma
 // This is the ONLY package that depends on @prisma/client directly.
-// All other packages import PrismaClient from here.
+// All other packages import PrismaClient and Prisma from here.
 
-export { PrismaClient } from '@prisma/client';
+export { PrismaClient, Prisma } from '@prisma/client';
 export type {
   Restaurant,
   Staff,

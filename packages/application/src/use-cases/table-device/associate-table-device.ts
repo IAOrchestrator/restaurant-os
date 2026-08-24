@@ -1,4 +1,4 @@
-import { TableDevice, EventType } from '@restaurant-os/domain';
+import { TableDevice, EventType, ActorType, createDomainEvent } from '@restaurant-os/domain';
 import type { TableDeviceRepository } from '../../ports/table-device-repository';
 import type { TableRepository } from '../../ports/table-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
@@ -6,6 +6,8 @@ import type { EventPublisher } from '../../ports/event-publisher';
 export interface AssociateTableDeviceInput {
   deviceId: string;
   tableId: string;
+  actorType?: ActorType;
+  actorId?: string | null;
 }
 
 export class AssociateTableDeviceUseCase {
@@ -42,13 +44,24 @@ export class AssociateTableDeviceUseCase {
 
     await this.deviceRepo.save(device);
 
-    await this.eventPublisher.publish(EventType.TABLE_DEVICE_ASSOCIATED, {
-      deviceId: device.id,
-      restaurantId: device.restaurantId,
-      tableId: input.tableId,
-      aggregateType: 'TableDevice',
-      aggregateId: device.id,
-    });
+    await this.eventPublisher.publish(
+      createDomainEvent({
+        type: EventType.TABLE_DEVICE_ASSOCIATED,
+        restaurantId: device.restaurantId,
+        aggregateType: 'TableDevice',
+        aggregateId: device.id,
+        tableId: input.tableId,
+        tableNumber: table.number,
+        actorType: input.actorType ?? ActorType.STAFF,
+        actorId: input.actorId ?? null,
+        payload: {
+          deviceId: device.id,
+          restaurantId: device.restaurantId,
+          tableId: input.tableId,
+          tableNumber: table.number,
+        },
+      }),
+    );
 
     return device;
   }

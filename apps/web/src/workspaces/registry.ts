@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Workspace } from '../types/workspace';
 import type { ActorType, StaffRole } from '../hooks/useContextState';
+import type { EventType } from '@restaurant-os/contracts';
 
 import { DashboardPage } from './dashboard/dashboard-page';
 import { ReceptionPage } from './reception';
@@ -19,7 +20,7 @@ export interface WorkspaceDefinition {
   targetActorType: ActorType;
   allowedActorTypes: ActorType[];
   allowedStaffRoles?: StaffRole[];
-  allowedEventTypes: string[];
+  allowedEventTypes: Array<EventType | '*' | string>;
   Component: React.ComponentType;
 }
 
@@ -46,9 +47,14 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedEventTypes: [
       'CUSTOMER_JOINED_WAITLIST',
       'CUSTOMER_CALLED',
+      'CUSTOMER_CONFIRMED',
       'CUSTOMER_SEATED',
+      'CUSTOMER_CANCELLED_WAIT',
+      'CUSTOMER_SELECTED_TAKEAWAY',
+      'TABLE_ASSIGNED',
       'TABLE_CHANGED',
-      'TABLE_SESSION_OPENED',
+      'TABLE_RELEASED',
+      'TABLE_CLOSED',
       'ACCOUNT_CLOSED',
     ],
     Component: ReceptionPage,
@@ -62,15 +68,17 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedActorTypes: ['STAFF'],
     allowedStaffRoles: ['WAITER', 'ADMIN', 'RECEPTIONIST'],
     allowedEventTypes: [
-      'ORDER_CREATED',
-      'ORDER_SENT_TO_KITCHEN',
-      'KITCHEN_ORDER_NEARLY_READY',
-      'KITCHEN_ORDER_READY',
-      'ORDER_DELIVERED',
-      'SERVICE_TASK_CREATED',
-      'SERVICE_TASK_COMPLETED',
+      'TABLE_ASSIGNED',
       'TABLE_CHANGED',
       'WAITER_CHANGED',
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_NEARLY_READY',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'SERVICE_TASK_CREATED',
+      'TABLE_CLOSED',
+      'ACCOUNT_CLOSED',
     ],
     Component: WaiterPage,
   },
@@ -84,9 +92,11 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedStaffRoles: ['KITCHEN', 'ADMIN'],
     allowedEventTypes: [
       'ORDER_SENT_TO_KITCHEN',
-      'KITCHEN_ORDER_STARTED',
-      'KITCHEN_ORDER_NEARLY_READY',
-      'KITCHEN_ORDER_READY',
+      'KITCHEN_RECEIVED',
+      'KITCHEN_STARTED',
+      'ORDER_NEARLY_READY',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
       'ORDER_CANCELLED',
       'TABLE_CHANGED',
     ],
@@ -101,15 +111,16 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedActorTypes: ['TABLE_DEVICE', 'STAFF'],
     allowedStaffRoles: ['ADMIN'],
     allowedEventTypes: [
-      'TABLE_SESSION_OPENED',
-      'ORDER_CREATED',
+      'TABLE_ASSIGNED',
+      'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
-      'KITCHEN_ORDER_READY',
+      'ORDER_READY',
       'ORDER_DELIVERED',
-      'SERVICE_TASK_COMPLETED',
-      'BILL_REQUESTED',
+      'SERVICE_TASK_CREATED',
+      'ACCOUNT_REQUESTED',
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
+      'TABLE_CLOSED',
     ],
     Component: TablePage,
   },
@@ -123,11 +134,13 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedStaffRoles: ['ADMIN'],
     allowedEventTypes: [
       'CUSTOMER_CALLED',
+      'CUSTOMER_CONFIRMED',
       'CUSTOMER_SEATED',
-      'ORDER_CREATED',
-      'KITCHEN_ORDER_READY',
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_READY',
       'ORDER_DELIVERED',
-      'SERVICE_TASK_COMPLETED',
+      'SERVICE_TASK_CREATED',
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
     ],
@@ -142,12 +155,12 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedActorTypes: ['STAFF'],
     allowedStaffRoles: ['CASHIER', 'ADMIN'],
     allowedEventTypes: [
-      'TABLE_SESSION_OPENED',
-      'ORDER_SENT_TO_KITCHEN',
+      'TABLE_ASSIGNED',
       'ORDER_DELIVERED',
-      'BILL_REQUESTED',
+      'ACCOUNT_REQUESTED',
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
+      'TABLE_CLOSED',
     ],
     Component: CashierPage,
   },

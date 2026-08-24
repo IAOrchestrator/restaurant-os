@@ -10,8 +10,10 @@ import {
   type TableSessionRepository,
   type CustomerRepository,
   type EventPublisher,
+  type TransactionRunner,
+  type TransactionContext,
 } from '../src';
-import { Table, TableSession, TableStatus, Customer } from '@restaurant-os/domain';
+import { Table, TableSession, TableStatus, Customer, type DomainEvent } from '@restaurant-os/domain';
 
 class InMemoryTableRepo implements TableRepository {
   public tables = new Map<string, Table>();
@@ -50,8 +52,30 @@ class InMemoryCustomerRepo implements CustomerRepository {
 
 class RecordingEventPublisher implements EventPublisher {
   public events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
-  async publish(eventType: string, payload: Record<string, unknown>) {
-    this.events.push({ eventType, payload });
+  async publish(eventOrType: any, legacyPayload?: Record<string, unknown>) {
+    if (typeof eventOrType === 'object' && eventOrType !== null && 'type' in eventOrType) {
+      this.events.push({
+        eventType: eventOrType.type,
+        payload: {
+          ...(eventOrType.payload ?? {}),
+          tableSessionId: eventOrType.tableSessionId,
+          tableId: eventOrType.tableId,
+          tableNumber: eventOrType.tableNumber,
+          restaurantId: eventOrType.restaurantId,
+          actorType: eventOrType.actorType,
+        },
+      });
+    } else {
+      this.events.push({ eventType: eventOrType, payload: legacyPayload ?? {} });
+    }
+  }
+}
+
+class MockTransactionRunner implements TransactionRunner {
+  constructor(private readonly mockContext: TransactionContext) {}
+
+  async run<T>(fn: (ctx: TransactionContext) => Promise<T>): Promise<T> {
+    return fn(this.mockContext);
   }
 }
 
@@ -93,11 +117,83 @@ describe('TableSession and Customer Use Cases', () => {
     const reloadedNewTable = await tableRepo.findById('table-2');
     expect(reloadedNewTable?.status).toBe(TableStatus.OCCUPIED);
 
-    // Event should be published
+    // Event should be published with canonical metadata
     expect(eventPublisher.events).toHaveLength(1);
     expect(eventPublisher.events[0].eventType).toBe('TABLE_CHANGED');
     expect(eventPublisher.events[0].payload.oldTableId).toBe('table-1');
     expect(eventPublisher.events[0].payload.newTableId).toBe('table-2');
+    expect(eventPublisher.events[0].payload.newTableNumber).toBe(2);
+    expect(eventPublisher.events[0].payload.restaurantId).toBe(REST_ID);
+  });
+
+  it('executes changeTable atomically with TransactionRunner', async () => {
+    const tableRepo = new InMemoryTableRepo();
+    const sessionRepo = new InMemorySessionRepo();
+    const eventPublisher = new RecordingEventPublisher();
+
+    const txRunner = new MockTransactionRunner({
+      tableRepo,
+      sessionRepo,
+      orderRepo: {} as any,
+      kitchenOrderRepo: {} as any,
+      accountRepo: {} as any,
+    });
+
+    const tableA = Table.create({ id: 'table-z', restaurantId: REST_ID, number: 12, capacity: 4 }).value!;
+    const tableB = Table.create({ id: 'table-a', restaurantId: REST_ID, number: 27, capacity: 6 }).value!;
+    await tableRepo.save(tableA);
+    await tableRepo.save(tableB);
+
+    const session = TableSession.create({
+      id: 'session-xyz',
+      restaurantId: REST_ID,
+      tableId: 'table-z',
+      initialWaiterId: 'waiter-9',
+    }).value!;
+    await sessionRepo.save(session);
+
+    const useCase = new ChangeSessionTableUseCase(sessionRepo, tableRepo, eventPublisher, txRunner);
+    const updated = await useCase.execute({
+      sessionId: 'session-xyz',
+      newTableId: 'table-a',
+    });
+
+    expect(updated.tableId).toBe('table-a');
+    expect((await tableRepo.findById('table-z'))?.status).toBe(TableStatus.AVAILABLE);
+    expect((await tableRepo.findById('table-a'))?.status).toBe(TableStatus.OCCUPIED);
+    expect(eventPublisher.events).toHaveLength(1);
+    expect(eventPublisher.events[0].payload.newTableNumber).toBe(27);
+  });
+
+  it('does not publish event or change tables if target table is not available', async () => {
+    const tableRepo = new InMemoryTableRepo();
+    const sessionRepo = new InMemorySessionRepo();
+    const eventPublisher = new RecordingEventPublisher();
+
+    const table1 = Table.create({ id: 'table-1', restaurantId: REST_ID, number: 1, capacity: 4 }).value!;
+    const table2 = Table.create({ id: 'table-2', restaurantId: REST_ID, number: 2, capacity: 4, status: TableStatus.OCCUPIED }).value!;
+    await tableRepo.save(table1);
+    await tableRepo.save(table2);
+
+    const session = TableSession.create({
+      id: 'session-1',
+      restaurantId: REST_ID,
+      tableId: 'table-1',
+      initialWaiterId: 'waiter-1',
+    }).value!;
+    await sessionRepo.save(session);
+
+    const useCase = new ChangeSessionTableUseCase(sessionRepo, tableRepo, eventPublisher);
+
+    await expect(useCase.execute({
+      sessionId: 'session-1',
+      newTableId: 'table-2',
+    })).rejects.toThrow('Target table is not available');
+
+    // No events should be published
+    expect(eventPublisher.events).toHaveLength(0);
+    // Old table remains unchanged
+    expect((await tableRepo.findById('table-1'))?.status).toBe(TableStatus.AVAILABLE);
   });
 
   it('adds and removes customer from table session', async () => {

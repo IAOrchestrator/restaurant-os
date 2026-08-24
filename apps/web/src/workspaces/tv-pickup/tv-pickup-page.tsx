@@ -49,8 +49,9 @@ export function TvPickupPage() {
   const fetchTakeawayOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, productsRes] = await Promise.all([
+      const [ordersRes, preOrdersRes, productsRes] = await Promise.all([
         request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/preorders?restaurantId=${restaurantId}`),
         request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
       ]);
 
@@ -59,12 +60,15 @@ export function TvPickupPage() {
         return acc;
       }, {});
 
+      const combined: TakeawayOrder[] = [];
+
+      // 1. Process Orders
       if (ordersRes.data) {
-        const takeawayOrders: TakeawayOrder[] = ordersRes.data
-          .filter((o) => o.type === 'TAKEAWAY' || (!o.tableSessionId && o.status !== 'DRAFT'))
-          .map((o) => {
+        ordersRes.data
+          .filter((o) => o.type === 'TAKEAWAY' || (!o.tableSessionId && o.status !== 'CANCELLED'))
+          .forEach((o) => {
             const shortCode = o.id.length >= 2 ? o.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
-            return {
+            combined.push({
               id: o.id,
               code: `#L-${shortCode}`,
               status: o.status,
@@ -78,11 +82,36 @@ export function TvPickupPage() {
               })),
               readyAt: o.updatedAt,
               createdAt: o.createdAt,
-            };
+            });
           });
-
-        setOrders(takeawayOrders);
       }
+
+      // 2. Process Pre-Orders (if not already converted to orders)
+      if (preOrdersRes.data) {
+        preOrdersRes.data
+          .filter((p) => p.status === 'DRAFT' || p.status === 'READY' || p.status === 'REVIEWING')
+          .forEach((p) => {
+            const shortCode = p.id.length >= 2 ? p.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
+            const code = `#L-${shortCode}`;
+            if (!combined.some((c) => c.code === code)) {
+              combined.push({
+                id: `pre-${p.id}`,
+                code,
+                status: 'PREPARING',
+                isPaid: false,
+                totalAmount: 14200,
+                items: (p.items || []).map((it: any) => ({
+                  productId: it.productId,
+                  name: productMap[it.productId] || it.productId || 'Plato Retiro',
+                  quantity: it.quantity || 1,
+                })),
+                createdAt: p.createdAt,
+              });
+            }
+          });
+      }
+
+      setOrders(combined);
     } catch {
       // safe fallback
     } finally {

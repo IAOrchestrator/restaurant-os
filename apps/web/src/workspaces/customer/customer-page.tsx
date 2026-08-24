@@ -60,6 +60,41 @@ export function CustomerPage() {
   const [reviewMsg, setReviewMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedKey = `restaurant_os_customer_state_${restaurantId}_${actorId || 'anon'}`;
+      const saved = localStorage.getItem(savedKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.cart && Array.isArray(parsed.cart)) setCart(parsed.cart);
+        if (parsed.channel) setChannel(parsed.channel);
+        if (parsed.deliveryAddress) setDeliveryAddress(parsed.deliveryAddress);
+        if (parsed.activePreOrder) setActivePreOrder(parsed.activePreOrder);
+      }
+    } catch {
+      // safe fallback
+    }
+  }, [restaurantId, actorId]);
+
+  // Persist state to localStorage whenever modified
+  useEffect(() => {
+    try {
+      const savedKey = `restaurant_os_customer_state_${restaurantId}_${actorId || 'anon'}`;
+      localStorage.setItem(
+        savedKey,
+        JSON.stringify({
+          cart,
+          channel,
+          deliveryAddress,
+          activePreOrder,
+        }),
+      );
+    } catch {
+      // safe fallback
+    }
+  }, [restaurantId, actorId, cart, channel, deliveryAddress, activePreOrder]);
+
   const fetchMenu = useCallback(async () => {
     const res = await request<CatalogProduct[]>(`/api/catalog/products?restaurantId=${restaurantId}`);
     if (res.data) {
@@ -76,7 +111,7 @@ export function CustomerPage() {
     fetchMenu();
   }, [fetchMenu]);
 
-  // Real-time SSE
+  // Real-time SSE synchronization
   useSse({
     token: authToken,
     eventTypes: [
@@ -90,8 +125,15 @@ export function CustomerPage() {
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
     ],
-    onEvent: () => {
+    onEvent: (event) => {
       fetchMenu();
+      if (event.type === 'ORDER_READY' && activePreOrder) {
+        setActivePreOrder((prev) => (prev ? { ...prev, status: 'LISTO_PARA_RETIRAR' } : null));
+        setMsg({
+          type: 'success',
+          text: `✨ ¡Tu pedido ${activePreOrder.code} está listo para retirar en la barra!`,
+        });
+      }
     },
     onReconnect: () => {
       fetchMenu();
@@ -137,6 +179,7 @@ export function CustomerPage() {
     const generatedCode = `${codePrefix}-${randomNum}`;
 
     try {
+      // 1. Post Pre-Order to DB
       await request('/api/preorders', {
         method: 'POST',
         body: JSON.stringify({
@@ -148,17 +191,36 @@ export function CustomerPage() {
           })),
         }),
       });
+
+      // 2. If Takeaway or Delivery, also create the Order so TV Barra and Caja receive it immediately
+      if (channel === 'TAKEAWAY' || channel === 'DELIVERY') {
+        await request('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            restaurantId,
+            customerId: actorId,
+            type: channel,
+            items: cart.map((c) => ({
+              productId: c.product.id,
+              quantity: c.quantity,
+              unitPrice: c.product.price,
+            })),
+          }),
+        });
+      }
     } catch {
       // Offline fallback
     }
 
-    setActivePreOrder({
+    const preOrderObj = {
       code: generatedCode,
       type: channel,
       status: 'ACTIVO',
       totalAmount: cartTotal,
       itemsCount: cart.reduce((acc, it) => acc + it.quantity, 0),
-    });
+    };
+
+    setActivePreOrder(preOrderObj);
 
     setMsg({
       type: 'success',

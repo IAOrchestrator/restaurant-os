@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: restaurant-os-api
+    env: node
+    plan: free
+    buildCommand: npx pnpm install && npx pnpm --filter @restaurant-os/database db:generate && npx pnpm --filter @restaurant-os/api... build
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

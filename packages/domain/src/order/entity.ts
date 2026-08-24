@@ -20,6 +20,8 @@ export interface OrderItem {
   notes?: string;
 }
 
+export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+
 export class Order extends Entity<OrderId> {
   private constructor(
     id: OrderId,
@@ -28,8 +30,10 @@ export class Order extends Entity<OrderId> {
     public readonly customerId: string | null,
     private _status: OrderStatus,
     private _items: OrderItem[],
-    public readonly createdAt: Date,
-    public readonly updatedAt: Date,
+    public readonly type: OrderType = 'DINE_IN',
+    private _isPaid: boolean = false,
+    public readonly createdAt: Date = new Date(),
+    public readonly updatedAt: Date = new Date(),
   ) {
     super(id);
   }
@@ -40,6 +44,8 @@ export class Order extends Entity<OrderId> {
     tableSessionId: string;
     customerId?: string | null;
     items?: OrderItem[];
+    type?: OrderType;
+    isPaid?: boolean;
     createdAt?: Date;
   }): Result<Order, OrderDomainError> {
     const now = props.createdAt ?? new Date();
@@ -51,10 +57,16 @@ export class Order extends Entity<OrderId> {
         props.customerId ?? null,
         OrderStatus.DRAFT,
         props.items ?? [],
+        props.type ?? 'DINE_IN',
+        props.isPaid ?? false,
         now,
         now,
       ),
     );
+  }
+
+  get isPaid(): boolean {
+    return this._isPaid;
   }
 
   get status(): OrderStatus {
@@ -91,6 +103,8 @@ export class Order extends Entity<OrderId> {
         this.customerId,
         this._status,
         [...this._items, item],
+        this.type,
+        this._isPaid,
         this.createdAt,
         new Date(),
       ),
@@ -117,6 +131,8 @@ export class Order extends Entity<OrderId> {
         this.customerId,
         this._status,
         filtered,
+        this.type,
+        this._isPaid,
         this.createdAt,
         new Date(),
       ),
@@ -195,6 +211,23 @@ export class Order extends Entity<OrderId> {
     return ok(this.withStatus(OrderStatus.CANCELLED));
   }
 
+  markAsPaid(): Result<Order, OrderDomainError> {
+    return ok(
+      new Order(
+        this.id,
+        this.restaurantId,
+        this.tableSessionId,
+        this.customerId,
+        this._status,
+        this._items,
+        this.type,
+        true,
+        this.createdAt,
+        new Date(),
+      ),
+    );
+  }
+
   private withStatus(newStatus: OrderStatus): Order {
     return new Order(
       this.id,
@@ -203,6 +236,8 @@ export class Order extends Entity<OrderId> {
       this.customerId,
       newStatus,
       this._items,
+      this.type,
+      this._isPaid,
       this.createdAt,
       new Date(),
     );

@@ -192,6 +192,7 @@ async function bootstrap() {
     prefix: '/api/billing',
     accountRepo,
     orderRepo,
+    kitchenOrderRepo,
     sessionRepo,
     tableRepo,
     eventPublisher,

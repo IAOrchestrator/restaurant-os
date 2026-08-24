@@ -1,5 +1,6 @@
 import {
   Order,
+  OrderType,
   EventType,
   ActorType,
   createDomainEvent,
@@ -17,6 +18,7 @@ export interface CreateOrderInput {
   tableSessionId: string;
   customerId?: string | null;
   preOrderId?: string | null;
+  type?: OrderType;
   items: Array<{ productId: string; quantity: number; unitPrice: number; notes?: string }>;
   actorType?: ActorType;
   actorId?: string | null;
@@ -30,14 +32,17 @@ export class CreateOrderUseCase {
   ) {}
 
   async execute(input: CreateOrderInput): Promise<Result<Order, Error>> {
-    // If preOrderId provided, validate it exists and is confirmed
+    // If preOrderId provided, validate and atomically confirm/consume it so its intent QR dies
     if (input.preOrderId) {
       const preOrder = await this.preOrderRepo.findById(input.preOrderId);
       if (!preOrder) {
         return err(new Error('PreOrder not found'));
       }
       if (preOrder.status !== 'CONFIRMED') {
-        return err(new Error('PreOrder must be CONFIRMED to create an Order'));
+        const confirmedPre = preOrder.confirm();
+        if (confirmedPre.success) {
+          await this.preOrderRepo.save(confirmedPre.value);
+        }
       }
     }
 
@@ -46,6 +51,7 @@ export class CreateOrderUseCase {
       restaurantId: input.restaurantId,
       tableSessionId: input.tableSessionId,
       customerId: input.customerId ?? null,
+      type: input.type ?? 'DINE_IN',
     });
 
     if (!orderResult.success) {

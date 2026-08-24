@@ -4,19 +4,28 @@ import type { Order as PrismaOrder } from '@restaurant-os/database';
 export class OrderMapper {
   static toDomain(prismaOrder: PrismaOrder): Order | null {
     let items: Array<{ productId: string; quantity: number; unitPrice: number; notes?: string }> = [];
+    let orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' = 'DINE_IN';
+    let isPaid = false;
+
     try {
       if (prismaOrder.items && typeof prismaOrder.items === 'object') {
-        const parsed = prismaOrder.items as Record<string, unknown>;
-        if (Array.isArray(parsed)) {
-          items = parsed.map((item: unknown) => {
-            const i = item as Record<string, unknown>;
-            return {
-              productId: String(i.productId ?? ''),
-              quantity: Number(i.quantity ?? 0),
-              unitPrice: Number(i.unitPrice ?? 0),
-              notes: i.notes ? String(i.notes) : undefined,
-            };
-          });
+        const raw = prismaOrder.items as any;
+        if (Array.isArray(raw)) {
+          items = raw.map((item: any) => ({
+            productId: String(item.productId ?? ''),
+            quantity: Number(item.quantity ?? 0),
+            unitPrice: Number(item.unitPrice ?? 0),
+            notes: item.notes ? String(item.notes) : undefined,
+          }));
+        } else if (raw && Array.isArray(raw.items)) {
+          items = raw.items.map((item: any) => ({
+            productId: String(item.productId ?? ''),
+            quantity: Number(item.quantity ?? 0),
+            unitPrice: Number(item.unitPrice ?? 0),
+            notes: item.notes ? String(item.notes) : undefined,
+          }));
+          if (raw._meta?.type) orderType = raw._meta.type;
+          if (raw._meta?.isPaid) isPaid = raw._meta.isPaid;
         }
       }
     } catch {
@@ -29,6 +38,8 @@ export class OrderMapper {
       tableSessionId: prismaOrder.tableSessionId,
       customerId: prismaOrder.customerId,
       items,
+      type: orderType,
+      isPaid,
       createdAt: prismaOrder.createdAt,
     });
 
@@ -90,13 +101,20 @@ export class OrderMapper {
   }
 
   static toPrisma(order: Order): Omit<PrismaOrder, 'restaurant' | 'tableSession' | 'customer'> {
+    const payload = {
+      items: order.items,
+      _meta: {
+        type: order.type,
+        isPaid: order.isPaid,
+      },
+    };
     return {
       id: order.id,
       restaurantId: order.restaurantId,
       tableSessionId: order.tableSessionId,
       customerId: order.customerId,
       status: order.status,
-      items: order.items as any,
+      items: payload as any,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     };

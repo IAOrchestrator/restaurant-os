@@ -22,6 +22,7 @@ export interface SendToKitchenInput {
   actorId?: string | null;
   notes?: string | null;
   priority?: number;
+  isPaymentTriggered?: boolean;
 }
 
 export class SendToKitchenUseCase {
@@ -47,6 +48,27 @@ export class SendToKitchenUseCase {
       }
 
       let targetOrder = order;
+
+      // Rule Phase 2.1: TAKEAWAY / DELIVERY orders only go to KDS if paid
+      if (
+        (targetOrder.type === 'TAKEAWAY' || targetOrder.type === 'DELIVERY') &&
+        !targetOrder.isPaid &&
+        !input.isPaymentTriggered
+      ) {
+        return err(
+          new Error(
+            'PEDIDO TAKEAWAY/DELIVERY no puede enviarse a cocina sin estar PAGADO previamente en Caja',
+          ),
+        );
+      }
+
+      if (input.isPaymentTriggered && !targetOrder.isPaid) {
+        const paidResult = targetOrder.markAsPaid();
+        if (paidResult.success) {
+          targetOrder = paidResult.value;
+        }
+      }
+
       if (targetOrder.status === 'DRAFT') {
         const confirmed = targetOrder.confirm();
         if (!confirmed.success) {

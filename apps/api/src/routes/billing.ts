@@ -19,8 +19,10 @@ import {
   RequestPaymentUseCase,
   RegisterPaymentUseCase,
   CloseAccountUseCase,
+  SendToKitchenUseCase,
   type AccountRepository,
   type OrderRepository,
+  type KitchenOrderRepository,
   type TableSessionRepository,
   type TableRepository,
   type EventPublisher,
@@ -38,6 +40,7 @@ export interface BillingRoutesOptions {
   accountRepo: AccountRepository;
   orderRepo: OrderRepository;
   eventPublisher: EventPublisher;
+  kitchenOrderRepo?: KitchenOrderRepository;
   sessionRepo?: TableSessionRepository;
   tableRepo?: TableRepository;
   txRunner?: TransactionRunner;
@@ -52,6 +55,14 @@ export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOpt
   );
   const requestPaymentUseCase = new RequestPaymentUseCase(opts.accountRepo, opts.eventPublisher);
   const registerPaymentUseCase = new RegisterPaymentUseCase(opts.accountRepo, opts.eventPublisher);
+  const sendToKitchenUseCase = new SendToKitchenUseCase(
+    opts.orderRepo,
+    opts.eventPublisher,
+    opts.kitchenOrderRepo,
+    opts.sessionRepo,
+    opts.tableRepo,
+    opts.txRunner,
+  );
   const closeUseCase = new CloseAccountUseCase(
     opts.accountRepo,
     opts.eventPublisher,
@@ -283,6 +294,29 @@ export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOpt
 
       if (!result.success) {
         return reply.status(400).send({ error: result.error.message });
+      }
+
+      // Rule Phase 2.1: If account is for a TAKEAWAY or DELIVERY order, auto-dispatch to KDS upon payment!
+      try {
+        const sessionOrders = await opts.orderRepo.findByTableSessionId(result.value.tableSessionId);
+        for (const ord of sessionOrders) {
+          if (
+            (ord.type === 'TAKEAWAY' || ord.type === 'DELIVERY') &&
+            ord.status !== 'SENT_TO_KITCHEN' &&
+            ord.status !== 'PREPARING' &&
+            ord.status !== 'READY' &&
+            ord.status !== 'DELIVERED'
+          ) {
+            await sendToKitchenUseCase.execute({
+              orderId: ord.id,
+              isPaymentTriggered: true,
+              actorType: request.actor?.type,
+              actorId: request.actor?.id,
+            });
+          }
+        }
+      } catch {
+        // non-blocking
       }
 
       return AccountResponseSchema.parse({

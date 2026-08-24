@@ -131,10 +131,10 @@ export class PreOrder extends Entity<PreOrderId> {
   }
 
   confirm(): Result<PreOrder, PreOrderDomainError> {
-    if (this._status !== PreOrderStatus.REVIEWING) {
+    if (this._status === PreOrderStatus.CANCELLED || this._status === PreOrderStatus.CONFIRMED) {
       return err(
         new PreOrderDomainError(
-          `Cannot confirm: current status is ${this._status} (expected REVIEWING)`,
+          `Cannot confirm: current status is ${this._status}`,
         ),
       );
     }

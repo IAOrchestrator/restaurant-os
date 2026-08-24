@@ -278,6 +278,9 @@ export const PreOrderResponseSchema = z.object({
 export type PreOrderResponse = z.infer<typeof PreOrderResponseSchema>;
 
 // --- Order Contracts ---
+export const OrderTypeSchema = z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']);
+export type OrderType = z.infer<typeof OrderTypeSchema>;
+
 export const OrderItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive(),
@@ -291,6 +294,7 @@ export const CreateOrderSchema = z.object({
   tableSessionId: UuidSchema,
   customerId: UuidSchema.nullable().optional(),
   preOrderId: UuidSchema.nullable().optional(),
+  type: OrderTypeSchema.optional().default('DINE_IN'),
   items: z.array(OrderItemSchema).min(1),
 });
 
@@ -302,6 +306,8 @@ export const OrderResponseSchema = z.object({
   tableSessionId: UuidSchema,
   customerId: UuidSchema.nullable(),
   status: OrderStatusSchema,
+  type: OrderTypeSchema.optional().default('DINE_IN'),
+  isPaid: z.boolean().optional().default(false),
   items: z.array(OrderItemSchema),
   totalAmount: z.number().nonnegative(),
   createdAt: z.string().datetime(),

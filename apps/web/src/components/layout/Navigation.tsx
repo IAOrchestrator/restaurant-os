@@ -11,6 +11,8 @@ import {
   User,
   CreditCard,
   Sliders,
+  Tv,
+  Bike,
 } from 'lucide-react';
 
 const WORKSPACE_TABS: Array<{ id: Workspace; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -18,6 +20,8 @@ const WORKSPACE_TABS: Array<{ id: Workspace; label: string; icon: React.Componen
   { id: 'reception', label: 'Recepción & Mesas', icon: MapPin },
   { id: 'waiter', label: 'Mozo / Comandas', icon: Utensils },
   { id: 'kitchen', label: 'Cocina (KDS)', icon: ChefHat },
+  { id: 'tv-pickup', label: 'TV Barra Retiro', icon: Tv },
+  { id: 'delivery', label: 'Repartidor', icon: Bike },
   { id: 'table', label: 'Mesa (Tablet)', icon: Tablet },
   { id: 'customer', label: 'Cliente (Móvil)', icon: User },
   { id: 'cashier', label: 'Caja & Facturación', icon: CreditCard },

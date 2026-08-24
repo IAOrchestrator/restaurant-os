@@ -11,6 +11,8 @@ import { TablePage } from './table';
 import { CustomerPage } from './customer';
 import { CashierPage } from './cashier';
 import { AdminPage } from './admin';
+import { TvPickupPage } from './tv-pickup/tv-pickup-page';
+import { DeliveryPage } from './delivery/delivery-page';
 
 export interface WorkspaceDefinition {
   id: Workspace;
@@ -174,6 +176,39 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     allowedStaffRoles: ['ADMIN'],
     allowedEventTypes: ['*'],
     Component: AdminPage,
+  },
+  'tv-pickup': {
+    id: 'tv-pickup',
+    label: 'TV Barra Retiro',
+    icon: 'Tv',
+    description: 'Pantalla pública TV de llamados para pedidos TakeAway (#L-45 LISTO - Retirar en Barra) y panel de entrega',
+    targetActorType: 'STAFF',
+    allowedActorTypes: ['STAFF', 'CUSTOMER', 'TABLE_DEVICE'],
+    allowedStaffRoles: ['ADMIN', 'CASHIER', 'RECEPTIONIST', 'WAITER', 'KITCHEN'],
+    allowedEventTypes: [
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_NEARLY_READY',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+    ],
+    Component: TvPickupPage,
+  },
+  delivery: {
+    id: 'delivery',
+    label: 'Repartidor (Delivery)',
+    icon: 'Bike',
+    description: 'Módulo móvil para repartidores de pedidos Delivery (#D-45), mapa de dirección y confirmación de entrega en domicilio',
+    targetActorType: 'STAFF',
+    allowedActorTypes: ['STAFF'],
+    allowedStaffRoles: ['ADMIN', 'WAITER', 'RECEPTIONIST', 'CASHIER'],
+    allowedEventTypes: [
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'PAYMENT_REGISTERED',
+    ],
+    Component: DeliveryPage,
   },
 };
 

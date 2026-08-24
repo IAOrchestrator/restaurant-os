@@ -176,10 +176,10 @@ export class Order extends Entity<OrderId> {
   }
 
   markReady(): Result<Order, OrderDomainError> {
-    if (this._status !== OrderStatus.PREPARING) {
+    if (this._status !== OrderStatus.PREPARING && this._status !== OrderStatus.SENT_TO_KITCHEN) {
       return err(
         new OrderDomainError(
-          `Cannot mark ready: current status is ${this._status} (expected PREPARING)`,
+          `Cannot mark ready: current status is ${this._status} (expected PREPARING or SENT_TO_KITCHEN)`,
         ),
       );
     }

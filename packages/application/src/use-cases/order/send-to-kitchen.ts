@@ -113,7 +113,10 @@ export class SendToKitchenUseCase {
         }
       }
 
-      const tableLabel = tableNumber ? `M${tableNumber}` : (finalOrder.type === 'TAKEAWAY' ? 'L-45' : 'ORD');
+      const orderShortCode = finalOrder.id.length >= 2 ? finalOrder.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
+      const tableLabel = tableNumber
+        ? `M${tableNumber}`
+        : (finalOrder.type === 'TAKEAWAY' ? `L-${orderShortCode}` : (finalOrder.type === 'DELIVERY' ? `D-${orderShortCode}` : `O-${orderShortCode}`));
 
       // Partition items by Sector (PIZZAS, BEBIDAS, HELADOS, CAFE)
       const sectorMap: Record<string, Array<{ productId: string; name?: string; quantity: number; notes?: string }>> = {};

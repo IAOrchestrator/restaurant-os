@@ -17,6 +17,8 @@ const WORKSPACE_ACTOR_MAP: Record<Workspace, string[]> = {
   kitchen: ['STAFF'],
   cashier: ['STAFF'],
   admin: ['STAFF'],
+  'tv-pickup': ['STAFF', 'CUSTOMER', 'TABLE_DEVICE'],
+  delivery: ['STAFF'],
 };
 
 export function WorkspaceGuard({ workspace, actorType, children, fallback }: WorkspaceGuardProps) {

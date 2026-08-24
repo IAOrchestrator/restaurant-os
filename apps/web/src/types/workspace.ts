@@ -8,7 +8,9 @@ export type Workspace =
   | 'waiter'
   | 'kitchen'
   | 'cashier'
-  | 'admin';
+  | 'admin'
+  | 'tv-pickup'
+  | 'delivery';
 
 export interface WorkspaceConfig {
   id: Workspace;
@@ -49,12 +51,15 @@ export const WORKSPACE_CONFIGS: Record<Workspace, WorkspaceConfig> = {
     icon: 'Tablet',
     defaultRoute: '/table',
     allowedEventTypes: [
-      'TABLE_ASSIGNED',
+      'CUSTOMER_CALLED',
+      'CUSTOMER_CONFIRMED',
+      'CUSTOMER_SEATED',
       'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
+      'ORDER_NEARLY_READY',
       'ORDER_READY',
       'ORDER_DELIVERED',
-      'ACCOUNT_REQUESTED',
+      'SERVICE_TASK_CREATED',
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
       'TABLE_CLOSED',
@@ -134,5 +139,30 @@ export const WORKSPACE_CONFIGS: Record<Workspace, WorkspaceConfig> = {
     icon: 'Settings',
     defaultRoute: '/admin',
     allowedEventTypes: ['*'],
+  },
+  'tv-pickup': {
+    id: 'tv-pickup',
+    label: 'TV Barra Retiro',
+    icon: 'Tv',
+    defaultRoute: '/tv-pickup',
+    allowedEventTypes: [
+      'ORDER_CONFIRMED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_NEARLY_READY',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+    ],
+  },
+  delivery: {
+    id: 'delivery',
+    label: 'Repartidor',
+    icon: 'Bike',
+    defaultRoute: '/delivery',
+    allowedEventTypes: [
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_READY',
+      'ORDER_DELIVERED',
+      'PAYMENT_REGISTERED',
+    ],
   },
 };

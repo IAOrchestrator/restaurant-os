@@ -7,3 +7,5 @@ export { TablePage } from './table';
 export { CustomerPage } from './customer';
 export { CashierPage } from './cashier';
 export { AdminPage } from './admin';
+export { TvPickupPage } from './tv-pickup/tv-pickup-page';
+export { DeliveryPage } from './delivery/delivery-page';

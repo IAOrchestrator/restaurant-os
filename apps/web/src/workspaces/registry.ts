@@ -108,8 +108,8 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     icon: 'Tablet',
     description: 'Terminal fija de autoservicio en mesa, llamado de mozo y solicitud de cuenta',
     targetActorType: 'TABLE_DEVICE',
-    allowedActorTypes: ['TABLE_DEVICE', 'STAFF'],
-    allowedStaffRoles: ['ADMIN'],
+    allowedActorTypes: ['TABLE_DEVICE'],
+    allowedStaffRoles: [],
     allowedEventTypes: [
       'TABLE_ASSIGNED',
       'ORDER_CONFIRMED',
@@ -130,8 +130,8 @@ export const WORKSPACES_REGISTRY: Record<Workspace, WorkspaceDefinition> = {
     icon: 'User',
     description: 'Carta digital para comensal, auto-pedidos, pedidos de asistencia y encuestas',
     targetActorType: 'CUSTOMER',
-    allowedActorTypes: ['CUSTOMER', 'STAFF'],
-    allowedStaffRoles: ['ADMIN'],
+    allowedActorTypes: ['CUSTOMER'],
+    allowedStaffRoles: [],
     allowedEventTypes: [
       'CUSTOMER_CALLED',
       'CUSTOMER_CONFIRMED',

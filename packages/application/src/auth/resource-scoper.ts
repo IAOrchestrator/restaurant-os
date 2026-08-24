@@ -51,7 +51,11 @@ export class OperationalResourceScoper implements ResourceScoper {
     if (actor.isStaff()) {
       if (this.getStaffRoles) {
         const roles = await this.getStaffRoles(actor.id);
-        if (roles.includes(StaffRole.ADMIN) || roles.includes(StaffRole.RECEPTIONIST)) {
+        if (
+          roles.includes(StaffRole.ADMIN) ||
+          roles.includes(StaffRole.RECEPTIONIST) ||
+          roles.includes(StaffRole.CASHIER)
+        ) {
           return ResourceScope.restaurant();
         }
       }

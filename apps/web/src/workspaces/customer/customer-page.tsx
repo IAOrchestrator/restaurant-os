@@ -136,6 +136,22 @@ export function CustomerPage() {
     const randomNum = Math.floor(10 + Math.random() * 89);
     const generatedCode = `${codePrefix}-${randomNum}`;
 
+    try {
+      await request('/api/preorders', {
+        method: 'POST',
+        body: JSON.stringify({
+          restaurantId,
+          customerId: actorId,
+          items: cart.map((c) => ({
+            productId: c.product.id,
+            quantity: c.quantity,
+          })),
+        }),
+      });
+    } catch {
+      // Offline fallback
+    }
+
     setActivePreOrder({
       code: generatedCode,
       type: channel,

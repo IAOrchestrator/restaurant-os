@@ -66,18 +66,38 @@ export interface LiveOperationsReport {
   inventoryAlertsCount: number;
 }
 
+export interface LiveQrItem {
+  customerId: string;
+  customerName: string;
+  email: string | null;
+  phone: string | null;
+  code: string;
+  channel: 'SALON' | 'TAKEAWAY' | 'DELIVERY';
+  location: string;
+  status: string;
+  totalAmount: number;
+  updatedAt: string;
+}
+
 export function DashboardPage() {
   const { restaurantId, authToken } = useAppContext();
   const { request } = useApi();
 
   const [report, setReport] = useState<LiveOperationsReport | null>(null);
+  const [liveQrs, setLiveQrs] = useState<LiveQrItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchLiveMetrics = useCallback(async () => {
     setLoading(true);
-    const res = await request<LiveOperationsReport>(`/api/analytics/live-operations?restaurantId=${restaurantId}`);
-    if (res.data) {
-      setReport(res.data);
+    const [opsRes, qrsRes] = await Promise.all([
+      request<LiveOperationsReport>(`/api/analytics/live-operations?restaurantId=${restaurantId}`),
+      request<LiveQrItem[]>(`/api/analytics/live-qrs?restaurantId=${restaurantId}`),
+    ]);
+    if (opsRes.data) {
+      setReport(opsRes.data);
+    }
+    if (qrsRes.data) {
+      setLiveQrs(qrsRes.data);
     }
     setLoading(false);
   }, [request, restaurantId]);
@@ -404,63 +424,66 @@ export function DashboardPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-white/10 text-text-tertiary font-mono uppercase text-[10px]">
-                <th className="pb-2">Código QR</th>
-                <th className="pb-2">Canal</th>
                 <th className="pb-2">Cliente</th>
+                <th className="pb-2">Email (Gmail)</th>
+                <th className="pb-2">Teléfono / Destino</th>
+                <th className="pb-2">Canal / Decisión</th>
+                <th className="pb-2">Código QR</th>
                 <th className="pb-2">Estado del Token</th>
-                <th className="pb-2">Ronda / Mesa</th>
                 <th className="pb-2 text-right">Monto</th>
+                <th className="pb-2 text-right">Hora</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-mono">
-              <tr className="hover:bg-white/5">
-                <td className="py-2.5 font-bold text-amber">#P-12</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-amber/15 text-amber text-[10px] font-bold">
-                    🍽️ Salón
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-primary">Cliente #a012</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald text-[10px] font-bold">
-                    🟢 VIVO / ACTIVO
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-tertiary">Puerta / Espera</td>
-                <td className="py-2.5 text-right font-bold text-text-primary">$18.500</td>
-              </tr>
-              <tr className="hover:bg-white/5">
-                <td className="py-2.5 font-bold text-amber">#L-45</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-sky-500/15 text-sky-400 text-[10px] font-bold">
-                    🛍️ Retiro
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-primary">Cliente #b344</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-amber/15 text-amber text-[10px] font-bold">
-                    🟡 COBRADO / KDS
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-tertiary">Barra Mostrador</td>
-                <td className="py-2.5 text-right font-bold text-text-primary">$14.200</td>
-              </tr>
-              <tr className="hover:bg-white/5">
-                <td className="py-2.5 font-bold text-amber">#D-45</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-purple-500/15 text-purple-400 text-[10px] font-bold">
-                    🛵 Delivery
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-primary">Cliente #c889</td>
-                <td className="py-2.5">
-                  <span className="px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald text-[10px] font-bold">
-                    🟢 EN CAMINO
-                  </span>
-                </td>
-                <td className="py-2.5 text-text-tertiary">Rider #1</td>
-                <td className="py-2.5 text-right font-bold text-text-primary">$21.000</td>
-              </tr>
+              {liveQrs.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-text-tertiary">
+                    Sin comensales con QR vivo activo en este momento. Los pedidos y pre-órdenes aparecerán en tiempo real.
+                  </td>
+                </tr>
+              ) : (
+                liveQrs.map((item) => (
+                  <tr key={item.customerId} className="hover:bg-white/5 transition">
+                    <td className="py-2.5 font-bold text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber" />
+                      <span>{item.customerName}</span>
+                    </td>
+                    <td className="py-2.5 text-text-secondary">
+                      {item.email || <span className="text-text-tertiary italic">—</span>}
+                    </td>
+                    <td className="py-2.5 text-text-secondary">
+                      {item.phone || item.location || <span className="text-text-tertiary italic">—</span>}
+                    </td>
+                    <td className="py-2.5">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-pill text-[10px] font-bold ${
+                          item.channel === 'SALON'
+                            ? 'bg-amber/15 text-amber border border-amber/30'
+                            : item.channel === 'TAKEAWAY'
+                            ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
+                            : 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                        }`}
+                      >
+                        {item.channel === 'SALON' ? '🍽️ Salón' : item.channel === 'TAKEAWAY' ? '🛍️ Retiro' : '🛵 Delivery'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 font-bold font-mono text-amber">
+                      {item.code}
+                    </td>
+                    <td className="py-2.5">
+                      <span className="px-2 py-0.5 rounded-pill bg-surface-2 text-emerald text-[10px] font-bold border border-emerald/20">
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right font-bold text-amber">
+                      ${item.totalAmount.toLocaleString()}
+                    </td>
+                    <td className="py-2.5 text-right text-text-tertiary text-[11px]">
+                      {new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

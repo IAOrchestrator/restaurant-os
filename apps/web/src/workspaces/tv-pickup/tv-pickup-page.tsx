@@ -17,7 +17,8 @@ import {
 export interface TakeawayOrder {
   id: string;
   code: string; // e.g. #L-45
-  status: 'SENT_TO_KITCHEN' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
+  customerName?: string;
+  status: 'DRAFT' | 'CONFIRMED' | 'SENT_TO_KITCHEN' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
   isPaid: boolean;
   totalAmount: number;
   items: Array<{ productId: string; name?: string; quantity: number; notes?: string }>;
@@ -49,10 +50,10 @@ export function TvPickupPage() {
   const fetchTakeawayOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, preOrdersRes, productsRes] = await Promise.all([
+      const [ordersRes, productsRes, customersRes] = await Promise.all([
         request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/preorders?restaurantId=${restaurantId}`),
         request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/customers?restaurantId=${restaurantId}`),
       ]);
 
       const productMap = (productsRes.data || []).reduce<Record<string, string>>((acc, p) => {
@@ -60,17 +61,29 @@ export function TvPickupPage() {
         return acc;
       }, {});
 
+      const customerMap = (customersRes.data || []).reduce<Record<string, string>>((acc, c) => {
+        acc[c.id] = c.name;
+        return acc;
+      }, {});
+
       const combined: TakeawayOrder[] = [];
 
-      // 1. Process Orders
+      // Only display orders that are PAID and in active kitchen preparation or ready to be picked up
       if (ordersRes.data) {
         ordersRes.data
-          .filter((o) => o.type === 'TAKEAWAY' || (!o.tableSessionId && o.status !== 'CANCELLED'))
+          .filter(
+            (o) =>
+              (o.type === 'TAKEAWAY' || !o.tableSessionId) &&
+              o.status !== 'CANCELLED' &&
+              o.status !== 'DELIVERED' &&
+              (o.isPaid || o.status === 'SENT_TO_KITCHEN' || o.status === 'PREPARING' || o.status === 'READY'),
+          )
           .forEach((o) => {
             const shortCode = o.id.length >= 2 ? o.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
             combined.push({
               id: o.id,
               code: `#L-${shortCode}`,
+              customerName: customerMap[o.customerId] || 'Cliente Retiro',
               status: o.status,
               isPaid: o.isPaid ?? true,
               totalAmount: o.totalAmount || 0,
@@ -83,31 +96,6 @@ export function TvPickupPage() {
               readyAt: o.updatedAt,
               createdAt: o.createdAt,
             });
-          });
-      }
-
-      // 2. Process Pre-Orders (if not already converted to orders)
-      if (preOrdersRes.data) {
-        preOrdersRes.data
-          .filter((p) => p.status === 'DRAFT' || p.status === 'READY' || p.status === 'REVIEWING')
-          .forEach((p) => {
-            const shortCode = p.id.length >= 2 ? p.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
-            const code = `#L-${shortCode}`;
-            if (!combined.some((c) => c.code === code)) {
-              combined.push({
-                id: `pre-${p.id}`,
-                code,
-                status: 'PREPARING',
-                isPaid: false,
-                totalAmount: 14200,
-                items: (p.items || []).map((it: any) => ({
-                  productId: it.productId,
-                  name: productMap[it.productId] || it.productId || 'Plato Retiro',
-                  quantity: it.quantity || 1,
-                })),
-                createdAt: p.createdAt,
-              });
-            }
           });
       }
 
@@ -145,14 +133,14 @@ export function TvPickupPage() {
     },
   });
 
-  // Mark delivered at pickup counter
+  // Mark delivered at pickup counter (cleans from TV screen!)
   const handleDeliver = async (orderId: string) => {
     await request(`/api/orders/${orderId}/deliver`, { method: 'POST' });
     fetchTakeawayOrders();
   };
 
   const preparingOrders = orders.filter(
-    (o) => o.status === 'SENT_TO_KITCHEN' || o.status === 'PREPARING',
+    (o) => o.status === 'SENT_TO_KITCHEN' || o.status === 'PREPARING' || o.status === 'CONFIRMED',
   );
 
   const readyOrders = orders.filter((o) => o.status === 'READY');
@@ -185,7 +173,7 @@ export function TvPickupPage() {
           <button
             onClick={fetchTakeawayOrders}
             disabled={loading}
-            className="w-10 h-10 rounded-full glass flex items-center justify-center text-text-secondary hover:text-white transition active:scale-95"
+            className="w-10 h-10 rounded-full glass flex items-center justify-center text-text-secondary hover:text-white transition active:scale-95 cursor-pointer"
             title="Refrescar"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -223,6 +211,9 @@ export function TvPickupPage() {
                 >
                   <span className="text-2xl font-black font-mono tracking-wider text-text-primary">
                     {ord.code}
+                  </span>
+                  <span className="text-xs font-semibold text-text-secondary truncate max-w-[120px] mt-0.5">
+                    {ord.customerName}
                   </span>
                   <span className="text-[11px] font-mono text-orange-400 font-semibold mt-1">
                     Cocinando...
@@ -262,9 +253,14 @@ export function TvPickupPage() {
                   className="rounded-2xl bg-gradient-to-br from-emerald/20 to-surface-2 border-2 border-emerald text-white p-5 shadow-2xl flex flex-col justify-between min-h-[140px] relative group animate-slide-in"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-4xl font-black font-mono tracking-tight text-white drop-shadow-md">
-                      {ord.code}
-                    </span>
+                    <div>
+                      <span className="text-4xl font-black font-mono tracking-tight text-white drop-shadow-md">
+                        {ord.code}
+                      </span>
+                      <div className="text-sm font-bold text-emerald-300">
+                        {ord.customerName}
+                      </div>
+                    </div>
                     <span className="px-2.5 py-1 rounded-pill bg-emerald text-black text-xs font-black uppercase tracking-wider shadow-sm">
                       LISTO ✓
                     </span>
@@ -281,7 +277,7 @@ export function TvPickupPage() {
 
                   <button
                     onClick={() => handleDeliver(ord.id)}
-                    className="w-full h-9 rounded-xl bg-white text-black hover:bg-white/90 font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md mt-1"
+                    className="w-full h-9 rounded-xl bg-white text-black hover:bg-white/90 font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md mt-1 cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4 text-emerald" />
                     <span>Entregar al Cliente</span>

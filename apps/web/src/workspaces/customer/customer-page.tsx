@@ -290,41 +290,80 @@ export function CustomerPage() {
 
       {/* Active Live QR Card (If Generated) */}
       {activePreOrder && (
-        <section className="rounded-xl bg-gradient-to-br from-amber/20 to-surface-2 border-2 border-amber p-5 mb-6 shadow-glowAmber text-center relative overflow-hidden animate-slide-in">
+        <section
+          className={`rounded-xl border-2 p-5 mb-6 text-center relative overflow-hidden animate-slide-in shadow-2xl ${
+            activePreOrder.status === 'DELIVERED'
+              ? 'bg-emerald/15 border-emerald shadow-glowEmerald'
+              : activePreOrder.status === 'LISTO_PARA_RETIRAR'
+              ? 'bg-amber/20 border-amber shadow-glowAmber animate-pulse'
+              : activePreOrder.status === 'EN_PREPARACION'
+              ? 'bg-orange-500/15 border-orange-500/50'
+              : 'bg-surface-2 border-amber/60 shadow-glowAmber'
+          }`}
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="px-2.5 py-0.5 rounded-pill bg-amber text-black text-[10px] font-black uppercase tracking-wider">
               {activePreOrder.type === 'SALON' ? '🍽️ Salón' : (activePreOrder.type === 'TAKEAWAY' ? '🛍️ Retiro' : '🛵 Delivery')}
             </span>
-            <span className="text-xs font-mono text-emerald font-bold flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald animate-ping" />
-              <span>QR VIVO ÚNICO</span>
-            </span>
+
+            {activePreOrder.status === 'DELIVERED' ? (
+              <span className="px-2.5 py-0.5 rounded-pill bg-emerald text-black text-[10px] font-extrabold uppercase">
+                🎉 ENTREGADO
+              </span>
+            ) : activePreOrder.status === 'LISTO_PARA_RETIRAR' ? (
+              <span className="px-2.5 py-0.5 rounded-pill bg-emerald text-white text-[10px] font-extrabold uppercase animate-bounce">
+                ✨ LISTO EN BARRA
+              </span>
+            ) : activePreOrder.status === 'EN_PREPARACION' ? (
+              <span className="px-2.5 py-0.5 rounded-pill bg-orange-500 text-white text-[10px] font-extrabold uppercase">
+                🔥 EN PREPARACIÓN
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-pill bg-amber/20 text-amber border border-amber/40 text-[10px] font-extrabold uppercase">
+                🟡 PENDIENTE COBRO EN CAJA
+              </span>
+            )}
           </div>
 
           {/* Crisp Giant SVG QR Code */}
-          <div className="my-3 flex justify-center">
-            <QrCodeVisual
-              value={JSON.stringify({
-                code: activePreOrder.code,
-                type: activePreOrder.type,
-                restaurantId,
-                total: activePreOrder.totalAmount,
-              })}
-              size={180}
-              subLabel={`CÓDIGO: ${activePreOrder.code}`}
-            />
-          </div>
+          {activePreOrder.status !== 'DELIVERED' ? (
+            <div className="my-3 flex justify-center">
+              <QrCodeVisual
+                value={JSON.stringify({
+                  code: activePreOrder.code,
+                  type: activePreOrder.type,
+                  restaurantId,
+                  total: activePreOrder.totalAmount,
+                })}
+                size={180}
+                subLabel={`CÓDIGO: ${activePreOrder.code}`}
+              />
+            </div>
+          ) : (
+            <div className="my-6 flex flex-col items-center justify-center gap-2">
+              <div className="w-16 h-16 rounded-full bg-emerald text-white flex items-center justify-center shadow-glowEmerald">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <div className="text-xl font-extrabold text-emerald">¡Pedido Entregado con Éxito!</div>
+            </div>
+          )}
 
           <div className="text-3xl font-black font-mono tracking-wider text-white mb-2">
             {activePreOrder.code}
           </div>
 
           <p className="text-xs text-text-secondary mb-3 px-2">
-            {activePreOrder.type === 'SALON'
+            {activePreOrder.status === 'DELIVERED'
+              ? '¡Esperamos que disfrutes tu comida! Gracias por tu compra.'
+              : activePreOrder.status === 'LISTO_PARA_RETIRAR'
+              ? '¡Tu pedido está listo y caliente! Acércate al mostrador de la Barra para retirarlo.'
+              : activePreOrder.status === 'EN_PREPARACION'
+              ? '¡Pago confirmado! Cocina está preparando tu pedido. Síguelo en la pantalla TV Barra Retiro.'
+              : activePreOrder.type === 'SALON'
               ? 'Muestra este código al Mozo o Recepción al sentarte en tu mesa.'
-              : (activePreOrder.type === 'TAKEAWAY'
-              ? 'Muestra este código en Caja para abonar y luego retira en Barra.'
-              : `Enviando a: ${deliveryAddress || 'Domicilio del cliente'}`)}
+              : activePreOrder.type === 'TAKEAWAY'
+              ? 'Acércate a Caja con tu código o QR para abonar y enviar tu pedido a cocina.'
+              : `Enviando a: ${deliveryAddress || 'Domicilio del cliente'}`}
           </p>
 
           <div className="flex justify-between items-center bg-black/40 rounded-lg p-2.5 text-xs font-mono">
@@ -332,21 +371,41 @@ export function CustomerPage() {
             <span className="font-bold text-amber">${activePreOrder.totalAmount.toLocaleString()}</span>
           </div>
 
-          {/* Placeholder for Gmail Login */}
-          <div className="mt-3 pt-3 border-t border-white/10">
+          {/* Action button if delivered */}
+          {activePreOrder.status === 'DELIVERED' && (
             <button
               type="button"
-              onClick={() =>
-                setMsg({
-                  type: 'success',
-                  text: 'ℹ️ Vinculación con Gmail OAuth se habilitará en Fase 3. ¡Tu sesión actual ya funciona sin fricción!',
-                })
-              }
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-white bg-surface-2 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-pill transition cursor-pointer"
+              onClick={() => {
+                setActivePreOrder(null);
+                setCart([]);
+                const savedKey = `restaurant_os_customer_state_${restaurantId}_${actorId || 'anon'}`;
+                localStorage.removeItem(savedKey);
+                setMsg({ type: 'success', text: '🍽️ ¡Listo para un nuevo pedido!' });
+              }}
+              className="mt-4 w-full h-11 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition cursor-pointer"
             >
-              <span>✉️ Guardar con Gmail (Próximamente Fase 3)</span>
+              <Utensils className="w-4 h-4" />
+              <span>HACER UN NUEVO PEDIDO</span>
             </button>
-          </div>
+          )}
+
+          {/* Placeholder for Gmail Login */}
+          {activePreOrder.status !== 'DELIVERED' && (
+            <div className="mt-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() =>
+                  setMsg({
+                    type: 'success',
+                    text: 'ℹ️ Vinculación con Gmail OAuth se habilitará en Fase 3. ¡Tu sesión actual ya funciona sin fricción!',
+                  })
+                }
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-white bg-surface-2 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-pill transition cursor-pointer"
+              >
+                <span>✉️ Guardar con Gmail (Próximamente Fase 3)</span>
+              </button>
+            </div>
+          )}
         </section>
       )}
 

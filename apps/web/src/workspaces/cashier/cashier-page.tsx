@@ -19,11 +19,16 @@ import {
 
 export interface BillingAccount {
   id: string;
+  realAccountId?: string | null;
   tableSessionId: string;
+  tableNumber: number;
+  waiterName: string;
   totalAmount: number;
   paidAmount: number;
   balance: number;
   status: 'OPEN' | 'PAID' | 'CLOSED';
+  sessionStatus?: string;
+  items?: Array<{ name: string; quantity: number; unitPrice: number }>;
 }
 
 export function CashierPage() {
@@ -39,15 +44,85 @@ export function CashierPage() {
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
-    const res = await request<BillingAccount[]>(`/api/billing/accounts?restaurantId=${restaurantId}`);
-    if (res.data) {
-      setAccounts(res.data);
+    try {
+      const [accRes, sessionsRes, tablesRes, ordersRes, staffRes, prodsRes] = await Promise.all([
+        request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/tables?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/staff?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
+      ]);
+
+      const tableMap = (tablesRes.data || []).reduce<Record<string, number>>((acc, t) => {
+        acc[t.id] = t.number;
+        return acc;
+      }, {});
+
+      const waiterMap = (staffRes.data || []).reduce<Record<string, string>>((acc, w) => {
+        acc[w.id] = w.name;
+        return acc;
+      }, {});
+
+      const productMap = (prodsRes.data || []).reduce<Record<string, { name: string; price: number }>>((acc, p) => {
+        acc[p.id] = { name: p.name, price: p.price };
+        return acc;
+      }, {});
+
+      const activeSessions = (sessionsRes.data || []).filter((s) => s.status !== 'CLOSED');
+      const activeOrders = (ordersRes.data || []).filter((o) => o.status !== 'CANCELLED');
+      const existingAccounts = accRes.data || [];
+
+      // Build unified billing cards
+      const unifiedCards: BillingAccount[] = activeSessions
+        .map((session) => {
+          const sessionTableOrders = activeOrders.filter((o) => o.tableSessionId === session.id);
+          const existingAcc = existingAccounts.find((a) => a.tableSessionId === session.id);
+          const totalFromOrders = sessionTableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+          const totalAmount = existingAcc ? existingAcc.totalAmount : totalFromOrders;
+          const paidAmount = existingAcc ? existingAcc.paidAmount : 0;
+          const balance = Math.max(0, totalAmount - paidAmount);
+
+          if (totalAmount === 0 && !existingAcc) return null;
+
+          const itemsSummary: Array<{ name: string; quantity: number; unitPrice: number }> = [];
+          sessionTableOrders.forEach((ord) => {
+            (ord.items || []).forEach((it: any) => {
+              const pInfo = productMap[it.productId];
+              itemsSummary.push({
+                name: pInfo?.name || it.productId || 'Plato',
+                quantity: it.quantity || 1,
+                unitPrice: it.unitPrice || pInfo?.price || 0,
+              });
+            });
+          });
+
+          return {
+            id: existingAcc?.id || `session-acc-${session.id}`,
+            realAccountId: existingAcc?.id || null,
+            tableSessionId: session.id,
+            tableNumber: tableMap[session.tableId] || 1,
+            waiterName: waiterMap[session.currentWaiterId] || 'Mozo asignado',
+            totalAmount,
+            paidAmount,
+            balance,
+            status: (existingAcc?.status || (balance === 0 && totalAmount > 0 ? 'PAID' : 'OPEN')) as any,
+            sessionStatus: session.status,
+            items: itemsSummary,
+          };
+        })
+        .filter(Boolean) as BillingAccount[];
+
+      setAccounts(unifiedCards);
       if (selectedAccount) {
-        const updated = res.data.find((a) => a.id === selectedAccount.id);
+        const updated = unifiedCards.find((a) => a.tableSessionId === selectedAccount.tableSessionId);
         if (updated) setSelectedAccount(updated);
       }
+    } catch {
+      // safe fallback
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [request, restaurantId, selectedAccount]);
 
   useEffect(() => {
@@ -57,7 +132,16 @@ export function CashierPage() {
   // Real-time SSE & snapshot on reconnect
   useSse({
     token: authToken,
-    eventTypes: ['TABLE_ASSIGNED', 'ORDER_DELIVERED', 'ACCOUNT_REQUESTED', 'PAYMENT_REGISTERED', 'ACCOUNT_CLOSED', 'TABLE_CLOSED'],
+    eventTypes: [
+      'TABLE_ASSIGNED',
+      'ORDER_SENT_TO_KITCHEN',
+      'ORDER_DELIVERED',
+      'SERVICE_TASK_CREATED',
+      'ACCOUNT_REQUESTED',
+      'PAYMENT_REGISTERED',
+      'ACCOUNT_CLOSED',
+      'TABLE_CLOSED',
+    ],
     onEvent: () => {
       fetchAccounts();
     },
@@ -77,7 +161,39 @@ export function CashierPage() {
     if (!selectedAccount || paymentAmount <= 0) return;
 
     setMsg(null);
-    const res = await request(`/api/billing/accounts/${selectedAccount.id}/payments`, {
+    let targetAccId = selectedAccount.realAccountId;
+
+    // If account record does not exist in DB yet, create it and attach session orders
+    if (!targetAccId) {
+      const createdAcc = await request<any>('/api/billing/accounts', {
+        method: 'POST',
+        body: JSON.stringify({
+          restaurantId,
+          tableSessionId: selectedAccount.tableSessionId,
+        }),
+      });
+
+      if (createdAcc.data) {
+        targetAccId = createdAcc.data.id;
+        const ordersRes = await request<any[]>(`/api/orders?restaurantId=${restaurantId}`);
+        const sessionTableOrders = (ordersRes.data || []).filter(
+          (o) => o.tableSessionId === selectedAccount.tableSessionId && o.status !== 'CANCELLED',
+        );
+        for (const ord of sessionTableOrders) {
+          await request(`/api/billing/accounts/${targetAccId}/orders`, {
+            method: 'POST',
+            body: JSON.stringify({ orderId: ord.id }),
+          });
+        }
+      }
+    }
+
+    if (!targetAccId) {
+      setMsg({ type: 'error', text: 'Error al inicializar la cuenta de cobro' });
+      return;
+    }
+
+    const res = await request(`/api/billing/accounts/${targetAccId}/payments`, {
       method: 'POST',
       body: JSON.stringify({
         amount: Number(paymentAmount),
@@ -88,14 +204,21 @@ export function CashierPage() {
     if (res.error) {
       setMsg({ type: 'error', text: res.error });
     } else {
-      setMsg({ type: 'success', text: `💵 ¡Pago de $${paymentAmount.toLocaleString()} registrado con éxito!` });
+      setMsg({ type: 'success', text: `💵 ¡Cobro de $${paymentAmount.toLocaleString()} registrado con éxito!` });
       fetchAccounts();
     }
   };
 
-  const handleCloseAccount = async (accountId: string) => {
+  const handleCloseAccount = async (tableSessionId: string, realAccountId?: string | null) => {
     setMsg(null);
-    const res = await request(`/api/billing/accounts/${accountId}/close`, {
+    if (realAccountId) {
+      await request(`/api/billing/accounts/${realAccountId}/close`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+    }
+
+    const res = await request(`/api/table-sessions/${tableSessionId}/close`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
@@ -103,7 +226,7 @@ export function CashierPage() {
     if (res.error) {
       setMsg({ type: 'error', text: res.error });
     } else {
-      setMsg({ type: 'success', text: '🔒 Cuenta cerrada y mesa liberada con éxito.' });
+      setMsg({ type: 'success', text: '🔒 Cuenta cerrada y mesa liberada con éxito en todo el restaurante.' });
       setSelectedAccount(null);
       fetchAccounts();
     }
@@ -191,12 +314,12 @@ export function CashierPage() {
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xs bg-white text-black font-bold text-xs flex items-center justify-center shadow-sm">
-                          M
+                        <div className="w-9 h-9 rounded-xs bg-amber text-black font-bold text-sm flex items-center justify-center shadow-glowAmber">
+                          M{acc.tableNumber}
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-text-primary">Sesión #{acc.tableSessionId.slice(0, 6)}</div>
-                          <div className="text-[11px] text-text-tertiary font-mono">ID Cuenta: #{acc.id.slice(0, 6)}</div>
+                          <div className="text-sm font-bold text-text-primary">Mesa {acc.tableNumber}</div>
+                          <div className="text-[11px] text-text-secondary font-medium">Mozo: {acc.waiterName}</div>
                         </div>
                       </div>
 
@@ -207,11 +330,28 @@ export function CashierPage() {
                             : 'bg-amber/15 text-amber border border-amber/30'
                         }`}
                       >
-                        {isPaid ? 'PAGADO COMPLETO' : 'PENDIENTE'}
+                        {isPaid ? 'PAGADO COMPLETO' : 'LISTO PARA COBRAR'}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-xs font-mono">
+                    {/* Breakdown items preview */}
+                    {acc.items && acc.items.length > 0 && (
+                      <div className="py-2 border-y border-white/5 space-y-1 mb-2">
+                        {acc.items.slice(0, 3).map((it, idx) => (
+                          <div key={idx} className="flex justify-between text-[11px] text-text-secondary">
+                            <span>{it.quantity}x {it.name}</span>
+                            <span className="font-mono text-text-tertiary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {acc.items.length > 3 && (
+                          <div className="text-[10px] text-amber italic font-medium">
+                            +{acc.items.length - 3} platos más...
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs font-mono">
                       <div>
                         <div className="text-[10px] text-text-tertiary uppercase">Total</div>
                         <div className="font-bold text-text-primary mt-0.5">${acc.totalAmount.toLocaleString()}</div>
@@ -237,17 +377,39 @@ export function CashierPage() {
         {/* Right Side: POS Payment Form */}
         <section className="lg:col-span-5 rounded-lg bg-surface-1 border border-white/5 p-5 shadow-card">
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
-            <h2 className="text-sm font-bold">Terminal de Pago</h2>
+            <div>
+              <h2 className="text-sm font-bold">Terminal de Cobro</h2>
+              {selectedAccount && (
+                <p className="text-xs text-amber font-semibold">Mesa {selectedAccount.tableNumber} • {selectedAccount.waiterName}</p>
+              )}
+            </div>
             <Calculator className="w-4 h-4 text-amber" />
           </div>
 
           {!selectedAccount ? (
             <div className="h-72 border border-dashed border-white/10 rounded-md flex flex-col items-center justify-center text-text-tertiary gap-2 p-6 text-center">
               <CreditCard className="w-8 h-8 opacity-30" />
-              <span className="text-xs">Selecciona una cuenta de la lista para registrar el cobro</span>
+              <span className="text-xs">Selecciona una mesa de la lista para registrar el cobro</span>
             </div>
           ) : (
             <form onSubmit={handleRecordPayment} className="space-y-4">
+              {/* Itemized summary in terminal */}
+              {selectedAccount.items && selectedAccount.items.length > 0 && (
+                <div className="bg-surface-2 border border-white/5 rounded-md p-3 max-h-40 overflow-y-auto space-y-1.5 text-xs">
+                  <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Detalle de Comanda</div>
+                  {selectedAccount.items.map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-text-secondary">
+                      <span>{it.quantity}x {it.name}</span>
+                      <span className="font-mono font-medium text-text-primary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-text-primary text-xs">
+                    <span>Total Consumo:</span>
+                    <span className="font-mono text-amber">${selectedAccount.totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Payment Methods Grid */}
               <div>
                 <label className="text-xs text-text-secondary block mb-2 font-medium">Medio de Pago:</label>
@@ -265,7 +427,7 @@ export function CashierPage() {
                         key={method.id}
                         type="button"
                         onClick={() => setPaymentMethod(method.id as any)}
-                        className={`h-12 rounded-sm border p-2 flex items-center justify-center gap-2 text-xs font-semibold transition ${
+                        className={`h-11 rounded-sm border p-2 flex items-center justify-center gap-2 text-xs font-semibold transition ${
                           isMethodSelected
                             ? 'bg-amber text-black border-amber shadow-glowAmber font-bold'
                             : 'glass border-white/5 text-text-secondary hover:text-white'
@@ -289,7 +451,7 @@ export function CashierPage() {
                   value={paymentAmount || ''}
                   onChange={(e) => setPaymentAmount(Number(e.target.value))}
                   required
-                  className="w-full h-12 rounded-sm bg-surface-2 border border-white/10 px-4 text-lg font-mono font-bold text-amber focus:outline-none focus:border-amber"
+                  className="w-full h-11 rounded-sm bg-surface-2 border border-white/10 px-4 text-base font-mono font-bold text-amber focus:outline-none focus:border-amber"
                 />
 
                 {/* Quick Split Buttons */}
@@ -297,7 +459,7 @@ export function CashierPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(selectedPending)}
-                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10"
+                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10 text-amber"
                   >
                     100% (${selectedPending.toLocaleString()})
                   </button>
@@ -319,24 +481,30 @@ export function CashierPage() {
               </div>
 
               {/* Submit Payment Action */}
-              <button
-                type="submit"
-                disabled={paymentAmount <= 0}
-                className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition active:scale-98 disabled:opacity-40"
-              >
-                <DollarSign className="w-4 h-4" />
-                <span>REGISTRAR COBRO (${paymentAmount.toLocaleString()})</span>
-              </button>
+              {selectedPending > 0 ? (
+                <button
+                  type="submit"
+                  disabled={paymentAmount <= 0}
+                  className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition active:scale-98 disabled:opacity-40"
+                >
+                  <DollarSign className="w-4 h-4" />
+                  <span>REGISTRAR COBRO (${paymentAmount.toLocaleString()})</span>
+                </button>
+              ) : (
+                <div className="p-3 bg-emerald/10 border border-emerald/30 rounded-sm text-center text-emerald text-xs font-bold">
+                  ✓ Cuenta saldada al 100%
+                </div>
+              )}
 
-              {/* Close Account Action */}
+              {/* Close Account & Free Table Action */}
               {selectedPending === 0 && (
                 <button
                   type="button"
-                  onClick={() => handleCloseAccount(selectedAccount.id)}
-                  className="w-full h-11 rounded-sm bg-surface-2 border border-emerald/40 text-emerald hover:bg-emerald/20 font-bold text-xs flex items-center justify-center gap-2 transition"
+                  onClick={() => handleCloseAccount(selectedAccount.tableSessionId, selectedAccount.realAccountId)}
+                  className="w-full h-12 rounded-sm bg-surface-2 border border-emerald/40 text-emerald hover:bg-emerald/20 font-bold text-xs flex items-center justify-center gap-2 transition shadow-glowEmerald"
                 >
                   <Lock className="w-4 h-4" />
-                  <span>Cerrar Cuenta y Liberar Mesa</span>
+                  <span>CERRAR CUENTA Y LIBERAR MESA {selectedAccount.tableNumber}</span>
                 </button>
               )}
             </form>

@@ -83,11 +83,67 @@ export function KitchenPage() {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    const res = await request<KitchenOrder[]>(`/api/kitchen/orders?restaurantId=${restaurantId}`);
-    if (res.data) {
-      setOrders(res.data);
+    try {
+      const [koRes, ordersRes, tablesRes, sessionsRes, prodsRes] = await Promise.all([
+        request<any[]>(`/api/kitchen/orders?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/tables?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
+      ]);
+
+      const productMap = (prodsRes.data || []).reduce<Record<string, string>>((acc, p) => {
+        acc[p.id] = p.name;
+        return acc;
+      }, {});
+
+      const tableMap = (tablesRes.data || []).reduce<Record<string, number>>((acc, t) => {
+        acc[t.id] = t.number;
+        return acc;
+      }, {});
+
+      const sessionTableMap = (sessionsRes.data || []).reduce<Record<string, number>>((acc, s) => {
+        acc[s.id] = tableMap[s.tableId] || 1;
+        return acc;
+      }, {});
+
+      const orderMap = (ordersRes.data || []).reduce<Record<string, any>>((acc, o) => {
+        acc[o.id] = o;
+        return acc;
+      }, {});
+
+      if (koRes.data) {
+        const enriched: KitchenOrder[] = koRes.data.map((ko: any) => {
+          const rawOrder = orderMap[ko.orderId];
+          const tableNum = rawOrder?.tableSessionId ? sessionTableMap[rawOrder.tableSessionId] || 1 : 1;
+          const items: KitchenItem[] = (rawOrder?.items || []).map((it: any) => ({
+            id: it.productId || crypto.randomUUID(),
+            name: productMap[it.productId] || it.productId || 'Plato',
+            quantity: it.quantity || 1,
+            notes: it.notes || undefined,
+          }));
+
+          return {
+            id: ko.id,
+            orderId: ko.orderId,
+            restaurantId: ko.restaurantId,
+            tableNumber: tableNum,
+            status: ko.status,
+            items,
+            priority: (ko.priority > 0 ? 'URGENT' : 'NORMAL') as any,
+            receivedAt: ko.receivedAt || ko.createdAt || new Date().toISOString(),
+            startedAt: ko.startedAt,
+            readyAt: ko.readyAt,
+          };
+        });
+
+        setOrders(enriched);
+      }
+    } catch {
+      // safe fallback
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [request, restaurantId]);
 
   useEffect(() => {
@@ -234,7 +290,7 @@ export function KitchenPage() {
 
                       {/* Items List */}
                       <div className="space-y-2 mb-4">
-                        {order.items.map((item) => (
+                        {(order.items || []).map((item) => (
                           <div key={item.id} className="rounded-xs bg-white/[0.03] border border-white/5 p-2.5">
                             <div className="flex justify-between items-start gap-2">
                               <span className="text-sm font-semibold text-text-primary">

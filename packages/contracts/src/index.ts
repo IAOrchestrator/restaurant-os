@@ -376,7 +376,7 @@ export const UpdateCategorySchema = z.object({
 export type UpdateCategoryInput = z.infer<typeof UpdateCategorySchema>;
 
 export const CategoryResponseSchema = z.object({
-  id: UuidSchema,
+  id: z.string().min(1),
   restaurantId: UuidSchema,
   name: z.string(),
   description: z.string().nullable(),
@@ -389,9 +389,9 @@ export const CategoryResponseSchema = z.object({
 export type CategoryResponse = z.infer<typeof CategoryResponseSchema>;
 
 export const CreateProductSchema = z.object({
-  id: UuidSchema.optional(),
+  id: z.string().min(1).optional(),
   restaurantId: UuidSchema,
-  categoryId: UuidSchema,
+  categoryId: z.string().min(1),
   name: z.string().min(1).max(150),
   description: z.string().max(1000).nullable().optional(),
   price: z.number().nonnegative(),
@@ -405,7 +405,7 @@ export const UpdateProductSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   price: z.number().nonnegative().optional(),
   imageUrl: z.string().url().nullable().optional(),
-  categoryId: UuidSchema.optional(),
+  categoryId: z.string().min(1).optional(),
 });
 
 export type UpdateProductInput = z.infer<typeof UpdateProductSchema>;
@@ -417,9 +417,9 @@ export const ChangeAvailabilitySchema = z.object({
 export type ChangeAvailabilityInput = z.infer<typeof ChangeAvailabilitySchema>;
 
 export const ProductResponseSchema = z.object({
-  id: UuidSchema,
+  id: z.string().min(1),
   restaurantId: UuidSchema,
-  categoryId: UuidSchema,
+  categoryId: z.string().min(1),
   name: z.string(),
   description: z.string().nullable(),
   price: z.number().nonnegative(),

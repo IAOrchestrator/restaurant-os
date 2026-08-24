@@ -34,7 +34,43 @@ export async function waitlistRoutes(app: FastifyInstance, opts: WaitlistRoutesO
   const takeawayUseCase = new SelectTakeawayUseCase(opts.waitlistRepo, opts.eventPublisher);
   const seatUseCase = new SeatCustomerUseCase(opts.waitlistRepo, opts.eventPublisher);
 
-  // POST /api/waitlist
+  // POST /api/waitlist and POST /api/waitlist/join
+  const joinHandler = async (request: any, reply: any) => {
+    const parsed = JoinWaitlistSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.format() });
+    }
+
+    const result = await joinUseCase.execute({
+      id: parsed.data.id ?? randomUUID(),
+      restaurantId: parsed.data.restaurantId,
+      customerId: parsed.data.customerId ?? randomUUID(),
+      partySize: parsed.data.partySize,
+      preOrderId: parsed.data.preOrderId ?? null,
+    });
+
+    if (!result.success) {
+      return reply.status(400).send({ error: result.error.message });
+    }
+
+    return reply.status(201).send(
+      WaitlistEntryResponseSchema.parse({
+        id: result.value.id,
+        restaurantId: result.value.restaurantId,
+        customerId: result.value.customerId,
+        partySize: result.value.partySize,
+        status: result.value.status,
+        enteredAt: result.value.enteredAt.toISOString(),
+        calledAt: result.value.calledAt?.toISOString() ?? null,
+        seatedAt: result.value.seatedAt?.toISOString() ?? null,
+        cancelledAt: result.value.cancelledAt?.toISOString() ?? null,
+        preOrderId: result.value.preOrderId,
+        createdAt: result.value.createdAt.toISOString(),
+        updatedAt: result.value.updatedAt.toISOString(),
+      }),
+    );
+  };
+
   app.post(
     '/',
     {
@@ -43,41 +79,18 @@ export async function waitlistRoutes(app: FastifyInstance, opts: WaitlistRoutesO
         validateRestaurantAccess(),
       ],
     },
-    async (request, reply) => {
-      const parsed = JoinWaitlistSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.status(400).send({ error: parsed.error.format() });
-      }
+    joinHandler,
+  );
 
-      const result = await joinUseCase.execute({
-        id: parsed.data.id ?? randomUUID(),
-        restaurantId: parsed.data.restaurantId,
-        customerId: parsed.data.customerId ?? randomUUID(),
-        partySize: parsed.data.partySize,
-        preOrderId: parsed.data.preOrderId ?? null,
-      });
-
-      if (!result.success) {
-        return reply.status(400).send({ error: result.error.message });
-      }
-
-      return reply.status(201).send(
-        WaitlistEntryResponseSchema.parse({
-          id: result.value.id,
-          restaurantId: result.value.restaurantId,
-          customerId: result.value.customerId,
-          partySize: result.value.partySize,
-          status: result.value.status,
-          enteredAt: result.value.enteredAt.toISOString(),
-          calledAt: result.value.calledAt?.toISOString() ?? null,
-          seatedAt: result.value.seatedAt?.toISOString() ?? null,
-          cancelledAt: result.value.cancelledAt?.toISOString() ?? null,
-          preOrderId: result.value.preOrderId,
-          createdAt: result.value.createdAt.toISOString(),
-          updatedAt: result.value.updatedAt.toISOString(),
-        }),
-      );
+  app.post(
+    '/join',
+    {
+      preHandler: [
+        requirePermission(Permission.WAITLIST_MANAGE),
+        validateRestaurantAccess(),
+      ],
     },
+    joinHandler,
   );
 
   // GET /api/waitlist?restaurantId=...

@@ -63,6 +63,8 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
     Permission.CUSTOMER_MANAGE,
     Permission.STAFF_READ,
     Permission.CATALOG_READ,
+    Permission.SERVICE_TASKS_READ,
+    Permission.SERVICE_TASKS_MANAGE,
   ],
   [StaffRole.WAITER]: [
     Permission.TABLES_READ,

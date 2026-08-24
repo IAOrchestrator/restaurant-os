@@ -39,13 +39,21 @@ export interface StaffItem {
   roles: string[];
 }
 
+export interface CatalogCategory {
+  id: string;
+  name: string;
+  displayOrder?: number;
+}
+
 export interface CatalogProduct {
   id: string;
   name: string;
   price: number;
-  description?: string;
-  available: boolean;
-  category?: string;
+  description?: string | null;
+  isAvailable?: boolean;
+  available?: boolean;
+  categoryId?: string;
+  categoryName?: string;
 }
 
 export interface ServiceTaskItem {
@@ -62,6 +70,7 @@ export function WaiterPage() {
   const [sessions, setSessions] = useState<TableSessionItem[]>([]);
   const [tables, setTables] = useState<TableItem[]>([]);
   const [waiters, setWaiters] = useState<StaffItem[]>([]);
+  const [categoriesList, setCategoriesList] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [tasks, setTasks] = useState<ServiceTaskItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,13 +89,22 @@ export function WaiterPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionsRes, tablesRes, staffRes, productsRes, tasksRes] = await Promise.all([
+      const [sessionsRes, tablesRes, staffRes, categoriesRes, productsRes, tasksRes] = await Promise.all([
         request<TableSessionItem[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
         request<TableItem[]>(`/api/tables?restaurantId=${restaurantId}`),
         request<StaffItem[]>(`/api/staff?restaurantId=${restaurantId}&role=WAITER`),
+        request<CatalogCategory[]>(`/api/catalog/categories?restaurantId=${restaurantId}`),
         request<CatalogProduct[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
         request<ServiceTaskItem[]>(`/api/service/tasks?restaurantId=${restaurantId}`),
       ]);
+
+      const catMap: Record<string, string> = {};
+      if (categoriesRes.data) {
+        setCategoriesList(categoriesRes.data);
+        categoriesRes.data.forEach((c) => {
+          catMap[c.id] = c.name;
+        });
+      }
 
       if (sessionsRes.data) {
         const activeSessions = sessionsRes.data.filter((s) => s.status !== 'CLOSED');
@@ -98,7 +116,15 @@ export function WaiterPage() {
       }
       if (tablesRes.data) setTables(tablesRes.data);
       if (staffRes.data) setWaiters(staffRes.data);
-      if (productsRes.data) setProducts(productsRes.data.filter((p) => p.available));
+      if (productsRes.data) {
+        const mappedProducts = productsRes.data
+          .filter((p: any) => p.isAvailable !== false && p.available !== false)
+          .map((p: any) => ({
+            ...p,
+            categoryName: catMap[p.categoryId] || 'General',
+          }));
+        setProducts(mappedProducts);
+      }
       if (tasksRes.data) setTasks(tasksRes.data.filter((t) => t.status !== 'COMPLETED'));
     } catch {
       // ignore
@@ -177,10 +203,16 @@ export function WaiterPage() {
   const selectedTableNumber = selectedSession ? tableMap[selectedSession.tableId] || '?' : null;
 
   // Categories list
-  const categories = ['Todos', ...Array.from(new Set(products.map((p) => p.category || 'General')))];
+  const categories = [
+    'Todos',
+    ...categoriesList.map((c) => c.name),
+    ...Array.from(new Set(products.map((p) => p.categoryName || 'General'))).filter(
+      (name) => !categoriesList.some((c) => c.name === name),
+    ),
+  ];
   const filteredProducts = products.filter((p) => {
     if (selectedCategory === 'Todos') return true;
-    return (p.category || 'General') === selectedCategory;
+    return (p.categoryName || 'General') === selectedCategory;
   });
 
   // Cart operations

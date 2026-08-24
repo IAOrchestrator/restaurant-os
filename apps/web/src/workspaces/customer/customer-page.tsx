@@ -33,7 +33,7 @@ export function CustomerPage() {
 
   const fetchMenu = useCallback(async () => {
     const res = await request<CatalogProduct[]>(`/api/catalog/products?restaurantId=${restaurantId}`);
-    if (res.data) setProducts(res.data.filter((p) => p.available));
+    if (res.data) setProducts(res.data.filter((p: any) => p.isAvailable !== false && p.available !== false));
   }, [request, restaurantId]);
 
   useEffect(() => {

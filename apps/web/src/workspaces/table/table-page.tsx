@@ -76,7 +76,7 @@ export function TablePage() {
       }
     }
     if (prodRes.data) {
-      setProducts(prodRes.data.filter((p) => p.available));
+      setProducts(prodRes.data.filter((p: any) => p.isAvailable !== false && p.available !== false));
     }
     setLoading(false);
   }, [request, deviceId, restaurantId, selectedCategory]);

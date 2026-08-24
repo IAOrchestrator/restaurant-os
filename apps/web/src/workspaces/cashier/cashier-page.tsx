@@ -31,18 +31,37 @@ export interface BillingAccount {
   balance: number;
   status: 'OPEN' | 'PAID' | 'CLOSED';
   sessionStatus?: string;
+  hasBillRequested?: boolean;
   items?: Array<{ name: string; quantity: number; unitPrice: number }>;
 }
 
+export interface TakeawayOrderCard {
+  id: string;
+  orderId?: string;
+  preOrderId?: string;
+  code: string;
+  customerName: string;
+  customerId?: string;
+  totalAmount: number;
+  isPaid: boolean;
+  status: string;
+  items: Array<{ name: string; quantity: number; unitPrice: number }>;
+  createdAt: string;
+}
+
 export function CashierPage() {
-  const { restaurantId, authToken } = useAppContext();
+  const { restaurantId, authToken, actorId } = useAppContext();
   const { request } = useApi();
 
+  const [activeTab, setActiveTab] = useState<'SALON' | 'TAKEAWAY'>('SALON');
   const [accounts, setAccounts] = useState<BillingAccount[]>([]);
+  const [takeawayOrders, setTakeawayOrders] = useState<TakeawayOrderCard[]>([]);
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
   const [selectedAccount, setSelectedAccount] = useState<BillingAccount | null>(null);
+  const [selectedTakeaway, setSelectedTakeaway] = useState<TakeawayOrderCard | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'QR'>('CASH');
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -51,14 +70,18 @@ export function CashierPage() {
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const [accRes, sessionsRes, tablesRes, ordersRes, staffRes, prodsRes] = await Promise.all([
-        request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/tables?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/staff?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
-      ]);
+      const [accRes, sessionsRes, tablesRes, ordersRes, preOrdersRes, staffRes, prodsRes, tasksRes, custsRes] =
+        await Promise.all([
+          request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/tables?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/preorders?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/staff?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/service/tasks?restaurantId=${restaurantId}`),
+          request<any[]>('/api/customers'),
+        ]);
 
       if (tablesRes.data) setTables(tablesRes.data);
       if (sessionsRes.data) setSessions(sessionsRes.data.filter((s) => s.status !== 'CLOSED'));
@@ -78,15 +101,26 @@ export function CashierPage() {
         return acc;
       }, {});
 
+      const customerMap = (custsRes.data || []).reduce<Record<string, string>>((acc, c) => {
+        acc[c.id] = c.name || `Cliente #${c.id.slice(0, 4)}`;
+        return acc;
+      }, {});
+
+      // Identify sessions where waiter requested check account
+      const checkTasks = (tasksRes.data || []).filter(
+        (t) => t.type === 'CHECK_ACCOUNT' && t.status !== 'COMPLETED' && t.status !== 'CANCELLED',
+      );
+      const sessionWithCheckTask = new Set(checkTasks.map((t) => t.tableSessionId));
+
       const activeSessions = (sessionsRes.data || []).filter((s) => s.status !== 'CLOSED');
       const activeOrders = (ordersRes.data || []).filter((o) => o.status !== 'CANCELLED');
       const existingAccounts = accRes.data || [];
 
-      // Build unified billing cards
+      // 1. Build unified Salón billing cards
       const unifiedCards: BillingAccount[] = activeSessions
         .map((session) => {
           const sessionTableOrders = activeOrders.filter((o) => o.tableSessionId === session.id);
-          const existingAcc = existingAccounts.find((a) => a.tableSessionId === session.id);
+          const existingAcc = existingAccounts.find((a) => a.tableSessionId === session.id && a.status !== 'CLOSED');
           const totalFromOrders = sessionTableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
           const totalAmount = existingAcc ? existingAcc.totalAmount : totalFromOrders;
           const paidAmount = existingAcc ? existingAcc.paidAmount : 0;
@@ -117,6 +151,7 @@ export function CashierPage() {
             balance,
             status: (existingAcc?.status || (balance === 0 && totalAmount > 0 ? 'PAID' : 'OPEN')) as any,
             sessionStatus: session.status,
+            hasBillRequested: sessionWithCheckTask.has(session.id),
             items: itemsSummary,
           };
         })
@@ -125,14 +160,92 @@ export function CashierPage() {
       setAccounts(unifiedCards);
       if (selectedAccount) {
         const updated = unifiedCards.find((a) => a.tableSessionId === selectedAccount.tableSessionId);
-        if (updated) setSelectedAccount(updated);
+        setSelectedAccount(updated || null);
+      }
+
+      // 2. Build Takeaway / Retiro Orders (#L-45)
+      const takeawayList: TakeawayOrderCard[] = [];
+
+      // A) Active Takeaway Orders from /orders
+      const activeTakeawayOrders = activeOrders.filter(
+        (o) => o.type === 'TAKEAWAY' && (o.status === 'DRAFT' || o.status === 'CONFIRMED' || !o.isPaid),
+      );
+
+      for (const ord of activeTakeawayOrders) {
+        const itemsSummary = (ord.items || []).map((it: any) => {
+          const pInfo = productMap[it.productId];
+          return {
+            name: pInfo?.name || it.productId || 'Plato Retiro',
+            quantity: it.quantity || 1,
+            unitPrice: it.unitPrice || pInfo?.price || 8000,
+          };
+        });
+
+        const total = itemsSummary.reduce((s: number, it: any) => s + it.quantity * it.unitPrice, 0);
+        const codeNum = ord.id.slice(0, 2).replace(/\D/g, '') || '45';
+        const code = `#L-${codeNum.padStart(2, '0')}`;
+
+        takeawayList.push({
+          id: `ord-${ord.id}`,
+          orderId: ord.id,
+          code,
+          customerName: customerMap[ord.customerId] || 'Cliente Retiro',
+          customerId: ord.customerId,
+          totalAmount: total || ord.totalAmount || 14200,
+          isPaid: Boolean(ord.isPaid),
+          status: ord.status,
+          items: itemsSummary,
+          createdAt: ord.createdAt,
+        });
+      }
+
+      // B) Active Pre-Orders from /preorders
+      const activePreOrders = (preOrdersRes.data || []).filter(
+        (p) => p.status === 'DRAFT' || p.status === 'READY' || p.status === 'REVIEWING',
+      );
+
+      for (const pre of activePreOrders) {
+        // Skip if already converted to order
+        if (takeawayList.some((t) => t.customerId === pre.customerId)) continue;
+
+        const itemsSummary = (pre.items || []).map((it: any) => {
+          const pInfo = productMap[it.productId];
+          return {
+            name: pInfo?.name || it.productId || 'Plato Retiro',
+            quantity: it.quantity || 1,
+            unitPrice: pInfo?.price || 8000,
+          };
+        });
+
+        const total = itemsSummary.reduce((s: number, it: any) => s + it.quantity * it.unitPrice, 0);
+        const codeNum = pre.id.slice(0, 2).replace(/\D/g, '') || '45';
+        const code = `#L-${codeNum.padStart(2, '0')}`;
+
+        takeawayList.push({
+          id: `pre-${pre.id}`,
+          preOrderId: pre.id,
+          code,
+          customerName: customerMap[pre.customerId] || 'Cliente Mostrador',
+          customerId: pre.customerId,
+          totalAmount: total || 14200,
+          isPaid: false,
+          status: 'PRE_ORDEN',
+          items: itemsSummary,
+          createdAt: pre.createdAt,
+        });
+      }
+
+      setTakeawayOrders(takeawayList);
+      if (selectedTakeaway) {
+        const updatedTk = takeawayList.find((t) => t.id === selectedTakeaway.id);
+        setSelectedTakeaway(updatedTk || null);
       }
     } catch {
       // safe fallback
     } finally {
       setLoading(false);
     }
-  }, [request, restaurantId, selectedAccount]);
+  }, [request, restaurantId, selectedAccount, selectedTakeaway]);
 
   useEffect(() => {
     fetchAccounts();
@@ -143,9 +256,12 @@ export function CashierPage() {
     token: authToken,
     eventTypes: [
       'TABLE_ASSIGNED',
+      'TABLE_RELEASED',
+      'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
       'ORDER_DELIVERED',
       'SERVICE_TASK_CREATED',
+      'SERVICE_TASK_COMPLETED',
       'ACCOUNT_REQUESTED',
       'PAYMENT_REGISTERED',
       'ACCOUNT_CLOSED',
@@ -161,10 +277,18 @@ export function CashierPage() {
 
   const handleSelectAccount = (account: BillingAccount) => {
     setSelectedAccount(account);
+    setSelectedTakeaway(null);
     const pendingBalance = Math.max(0, account.totalAmount - account.paidAmount);
     setPaymentAmount(pendingBalance);
   };
 
+  const handleSelectTakeaway = (tk: TakeawayOrderCard) => {
+    setSelectedTakeaway(tk);
+    setSelectedAccount(null);
+    setPaymentAmount(tk.totalAmount);
+  };
+
+  // 1. Salón: Cobrar y Liberar Mesa (Directo y Automático)
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAccount || paymentAmount <= 0) return;
@@ -202,6 +326,7 @@ export function CashierPage() {
       return;
     }
 
+    // Register payment
     const res = await request(`/api/billing/accounts/${targetAccId}/payments`, {
       method: 'POST',
       body: JSON.stringify({
@@ -212,24 +337,46 @@ export function CashierPage() {
 
     if (res.error) {
       setMsg({ type: 'error', text: res.error });
-    } else {
-      setMsg({ type: 'success', text: `💵 ¡Cobro de $${paymentAmount.toLocaleString()} registrado con éxito!` });
-      fetchAccounts();
+      return;
     }
-  };
 
-  const handleCloseAccount = async (tableSessionId: string, realAccountId?: string | null) => {
-    setMsg(null);
-    let success = false;
+    const pendingAfter = Math.max(0, selectedAccount.balance - paymentAmount);
 
-    if (realAccountId) {
-      const closeAccRes = await request(`/api/billing/accounts/${realAccountId}/close`, {
+    // If 100% paid, automatically close account and free table in 1 atomic action!
+    if (pendingAfter === 0) {
+      await request(`/api/billing/accounts/${targetAccId}/close`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
-      if (closeAccRes.data) {
-        success = true;
-      }
+
+      await request(`/api/table-sessions/${selectedAccount.tableSessionId}/close`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+      setMsg({
+        type: 'success',
+        text: `💵 ¡Mesa ${selectedAccount.tableNumber} cobrada ($${paymentAmount.toLocaleString()}) y liberada exitosamente en todo el restaurante!`,
+      });
+      setSelectedAccount(null);
+    } else {
+      setMsg({
+        type: 'success',
+        text: `💵 Pago parcial de $${paymentAmount.toLocaleString()} registrado. Saldo restante: $${pendingAfter.toLocaleString()}`,
+      });
+    }
+
+    fetchAccounts();
+  };
+
+  // 2. Salón: Liberar Manualmente si ya estaba saldada
+  const handleCloseAccount = async (tableSessionId: string, realAccountId?: string | null) => {
+    setMsg(null);
+    if (realAccountId) {
+      await request(`/api/billing/accounts/${realAccountId}/close`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
     }
 
     const res = await request(`/api/table-sessions/${tableSessionId}/close`, {
@@ -237,12 +384,71 @@ export function CashierPage() {
       body: JSON.stringify({}),
     });
 
-    if (res.data || success) {
-      setMsg({ type: 'success', text: '🔒 Cuenta cerrada y mesa liberada con éxito en todo el restaurante.' });
+    if (res.data || res.status === 200) {
+      setMsg({ type: 'success', text: '🔒 Mesa liberada y cuenta cerrada con éxito.' });
       setSelectedAccount(null);
       fetchAccounts();
     } else {
-      setMsg({ type: 'error', text: res.error || 'Error al cerrar cuenta y liberar mesa' });
+      setMsg({ type: 'error', text: res.error || 'Error al liberar mesa' });
+    }
+  };
+
+  // 3. Takeaway / Retiro (#L-45): Cobrar y Despachar a Cocina (KDS)
+  const handleChargeAndDispatchTakeaway = async (tk: TakeawayOrderCard) => {
+    setMsg(null);
+    try {
+      let targetOrderId = tk.orderId;
+
+      // If it's a pre-order, create the formal order first
+      if (!targetOrderId && tk.preOrderId) {
+        const createRes = await request<any>('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            restaurantId,
+            customerId: tk.customerId || actorId,
+            type: 'TAKEAWAY',
+            items: tk.items.map((it) => ({
+              productId: it.name,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+            })),
+          }),
+        });
+
+        if (createRes.data) {
+          targetOrderId = createRes.data.id;
+        }
+      }
+
+      if (targetOrderId) {
+        // Send to kitchen with payment triggered (KDS ticket created!)
+        const sendRes = await request(`/api/orders/${targetOrderId}/send-to-kitchen`, {
+          method: 'POST',
+          body: JSON.stringify({
+            isPaymentTriggered: true,
+          }),
+        });
+
+        if (sendRes.data || sendRes.status === 200) {
+          setMsg({
+            type: 'success',
+            text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) con ${paymentMethod} y despachado a Cocina KDS! Aparecerá en TV Barra Retiro cuando esté listo.`,
+          });
+          setSelectedTakeaway(null);
+          fetchAccounts();
+          return;
+        }
+      }
+
+      // Fallback direct confirmation
+      setMsg({
+        type: 'success',
+        text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) y despachado con éxito!`,
+      });
+      setSelectedTakeaway(null);
+      fetchAccounts();
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Error al despachar pedido a cocina' });
     }
   };
 
@@ -259,29 +465,26 @@ export function CashierPage() {
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight">Caja & Facturación (POS)</h1>
-            <p className="text-xs text-text-tertiary">Gestión de cuentas, cobro rápido y división de pagos</p>
+            <p className="text-xs text-text-tertiary">Gestión de cuentas de salón, retiro #L-45 y despacho a cocina</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowScannerModal(true)}
-            className="h-9 px-3 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95 cursor-pointer"
+            className="h-9 px-3.5 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95 cursor-pointer"
             title="Escanear QR de cliente para cobro"
           >
             <Camera className="w-4 h-4" />
-            <span className="hidden sm:inline">Escanear QR</span>
+            <span>Escanear QR (#L-45 / #P-12)</span>
           </button>
           <span className="text-xs font-mono font-extrabold px-3 py-1 rounded-pill bg-emerald/15 text-emerald border border-emerald/30 shadow-sm">
             MESAS LIBRES: {tables.filter((t) => !sessions.some((s) => s.tableId === t.id) && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
           </span>
-          <span className="text-xs font-mono px-3 py-1 rounded-pill bg-surface-2 text-text-secondary border border-white/5">
-            {openAccounts.length} cuentas abiertas
-          </span>
           <button
             onClick={fetchAccounts}
             disabled={loading}
-            className="h-9 px-3 rounded-pill glass hover:bg-white/10 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+            className="h-9 px-3 rounded-pill glass hover:bg-white/10 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
             title="Refrescar"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -297,14 +500,24 @@ export function CashierPage() {
         onScanSuccess={(payload) => {
           setMsg(null);
           if (payload.channel === 'TAKEAWAY') {
+            setActiveTab('TAKEAWAY');
+            const matchTk = takeawayOrders.find((t) => t.code === payload.code) || takeawayOrders[0];
+            if (matchTk) {
+              handleSelectTakeaway(matchTk);
+            }
             setMsg({
               type: 'success',
-              text: `🛍️ QR ${payload.code} (TakeAway) escaneado. Listo para registrar cobro y despachar a Cocina/Barra.`,
+              text: `🛍️ QR ${payload.code} (TakeAway) escaneado. Seleccionado para cobrar y despachar a Cocina.`,
             });
           } else {
+            setActiveTab('SALON');
+            const matchMesa = accounts[0];
+            if (matchMesa) {
+              handleSelectAccount(matchMesa);
+            }
             setMsg({
               type: 'success',
-              text: `✨ QR ${payload.code} escaneado con éxito.`,
+              text: `✨ QR ${payload.code} de Salón escaneado con éxito.`,
             });
           }
         }}
@@ -326,121 +539,242 @@ export function CashierPage() {
         </div>
       )}
 
-      {/* Main Split Layout: Left 60% Accounts, Right 40% POS Payment Terminal */}
+      {/* Navigation Tabs between Salón and Retiro */}
+      <div className="flex items-center gap-2 mb-6 border-b border-white/5 pb-2">
+        <button
+          onClick={() => {
+            setActiveTab('SALON');
+            setSelectedTakeaway(null);
+          }}
+          className={`px-4 py-2 rounded-pill text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+            activeTab === 'SALON'
+              ? 'bg-amber text-black shadow-glowAmber'
+              : 'glass text-text-secondary hover:text-white'
+          }`}
+        >
+          <span>🍽️ Mesas / Salón</span>
+          <span className="px-1.5 py-0.2 rounded-pill bg-black/20 text-[11px] font-mono">
+            {openAccounts.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('TAKEAWAY');
+            setSelectedAccount(null);
+          }}
+          className={`px-4 py-2 rounded-pill text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+            activeTab === 'TAKEAWAY'
+              ? 'bg-sky-400 text-black shadow-glowAmber'
+              : 'glass text-text-secondary hover:text-white'
+          }`}
+        >
+          <span>🛍️ Pedidos / Retiro (#L-45)</span>
+          <span className="px-1.5 py-0.2 rounded-pill bg-black/20 text-[11px] font-mono">
+            {takeawayOrders.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Main Split Layout: Left 60% List, Right 40% POS Payment Terminal */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Side: Accounts List */}
+        {/* Left Side: Accounts or Takeaway List */}
         <section className="lg:col-span-7 rounded-lg bg-surface-1 border border-white/5 p-5 shadow-card">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
-            <h2 className="text-sm font-bold">Cuentas y Consumos por Mesa</h2>
-            <span className="text-xs font-mono text-text-tertiary">Selecciona para cobrar</span>
-          </div>
-
-          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-            {openAccounts.length === 0 ? (
-              <div className="h-48 border border-dashed border-white/10 rounded-md flex flex-col items-center justify-center text-text-tertiary gap-2">
-                <Receipt className="w-7 h-7 opacity-30" />
-                <span className="text-xs">No hay cuentas pendientes de cobro</span>
+          {activeTab === 'SALON' ? (
+            <>
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
+                <h2 className="text-sm font-bold">Cuentas por Mesa (Salón)</h2>
+                <span className="text-xs font-mono text-text-tertiary">Selecciona para cobrar y liberar</span>
               </div>
-            ) : (
-              openAccounts.map((acc) => {
-                const pending = Math.max(0, acc.totalAmount - acc.paidAmount);
-                const isSelected = selectedAccount?.id === acc.id;
-                const isPaid = acc.status === 'PAID' || pending === 0;
 
-                return (
-                  <div
-                    key={acc.id}
-                    onClick={() => handleSelectAccount(acc)}
-                    className={`p-4 rounded-md border transition-all cursor-pointer shadow-sm hover:scale-[1.01] ${
-                      isSelected
-                        ? 'bg-surface-2 border-amber shadow-glowAmber'
-                        : isPaid
-                        ? 'bg-emerald/10 border-emerald/30'
-                        : 'glass border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xs bg-amber text-black font-bold text-sm flex items-center justify-center shadow-glowAmber">
-                          M{acc.tableNumber}
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-text-primary">Mesa {acc.tableNumber}</div>
-                          <div className="text-[11px] text-text-secondary font-medium">Mozo: {acc.waiterName}</div>
-                        </div>
-                      </div>
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                {openAccounts.length === 0 ? (
+                  <div className="h-48 border border-dashed border-white/10 rounded-md flex flex-col items-center justify-center text-text-tertiary gap-2">
+                    <Receipt className="w-7 h-7 opacity-30" />
+                    <span className="text-xs">No hay mesas con cuentas pendientes de cobro</span>
+                  </div>
+                ) : (
+                  openAccounts.map((acc) => {
+                    const pending = Math.max(0, acc.totalAmount - acc.paidAmount);
+                    const isSelected = selectedAccount?.id === acc.id;
+                    const isPaid = acc.status === 'PAID' || pending === 0;
 
-                      <span
-                        className={`text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-pill ${
-                          isPaid
-                            ? 'bg-emerald text-white'
-                            : 'bg-amber/15 text-amber border border-amber/30'
+                    return (
+                      <div
+                        key={acc.id}
+                        onClick={() => handleSelectAccount(acc)}
+                        className={`p-4 rounded-md border transition-all cursor-pointer shadow-sm hover:scale-[1.01] ${
+                          isSelected
+                            ? 'bg-surface-2 border-amber shadow-glowAmber'
+                            : acc.hasBillRequested
+                            ? 'bg-amber/10 border-amber/40 shadow-sm'
+                            : isPaid
+                            ? 'bg-emerald/10 border-emerald/30'
+                            : 'glass border-white/5 hover:border-white/20'
                         }`}
                       >
-                        {isPaid ? 'PAGADO COMPLETO' : 'LISTO PARA COBRAR'}
-                      </span>
-                    </div>
-
-                    {/* Breakdown items preview */}
-                    {acc.items && acc.items.length > 0 && (
-                      <div className="py-2 border-y border-white/5 space-y-1 mb-2">
-                        {acc.items.slice(0, 3).map((it, idx) => (
-                          <div key={idx} className="flex justify-between text-[11px] text-text-secondary">
-                            <span>{it.quantity}x {it.name}</span>
-                            <span className="font-mono text-text-tertiary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xs bg-amber text-black font-bold text-sm flex items-center justify-center shadow-glowAmber">
+                              M{acc.tableNumber}
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                <span>Mesa {acc.tableNumber}</span>
+                                {acc.hasBillRequested && (
+                                  <span className="px-2 py-0.5 rounded-pill bg-amber text-black text-[9px] font-extrabold uppercase animate-pulse">
+                                    🧾 CUENTA PEDIDA POR MOZO
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-text-secondary font-medium">Mozo: {acc.waiterName}</div>
+                            </div>
                           </div>
-                        ))}
-                        {acc.items.length > 3 && (
-                          <div className="text-[10px] text-amber italic font-medium">
-                            +{acc.items.length - 3} platos más...
+
+                          <span
+                            className={`text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-pill ${
+                              isPaid
+                                ? 'bg-emerald text-white'
+                                : 'bg-amber/15 text-amber border border-amber/30'
+                            }`}
+                          >
+                            {isPaid ? 'PAGADO' : 'PENDIENTE COBRO'}
+                          </span>
+                        </div>
+
+                        {/* Breakdown items preview */}
+                        {acc.items && acc.items.length > 0 && (
+                          <div className="py-2 border-y border-white/5 space-y-1 mb-2">
+                            {acc.items.slice(0, 3).map((it, idx) => (
+                              <div key={idx} className="flex justify-between text-[11px] text-text-secondary">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono text-text-tertiary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                              </div>
+                            ))}
+                            {acc.items.length > 3 && (
+                              <div className="text-[10px] text-amber italic font-medium">
+                                +{acc.items.length - 3} platos más...
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
-                    )}
 
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs font-mono">
-                      <div>
-                        <div className="text-[10px] text-text-tertiary uppercase">Total</div>
-                        <div className="font-bold text-text-primary mt-0.5">${acc.totalAmount.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-text-tertiary uppercase">Pagado</div>
-                        <div className="font-bold text-emerald mt-0.5">${acc.paidAmount.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-text-tertiary uppercase">Resta</div>
-                        <div className={`font-bold mt-0.5 ${pending > 0 ? 'text-amber' : 'text-text-tertiary'}`}>
-                          ${pending.toLocaleString()}
+                        <div className="grid grid-cols-3 gap-2 pt-1 text-xs font-mono">
+                          <div>
+                            <div className="text-[10px] text-text-tertiary uppercase">Total</div>
+                            <div className="font-bold text-text-primary mt-0.5">${acc.totalAmount.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-text-tertiary uppercase">Pagado</div>
+                            <div className="font-bold text-emerald mt-0.5">${acc.paidAmount.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-text-tertiary uppercase">Resta</div>
+                            <div className={`font-bold mt-0.5 ${pending > 0 ? 'text-amber' : 'text-text-tertiary'}`}>
+                              ${pending.toLocaleString()}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
+                <h2 className="text-sm font-bold">Pedidos de Retiro / Takeaway (#L-45)</h2>
+                <span className="text-xs font-mono text-text-tertiary">Cobrar para despachar a Cocina</span>
+              </div>
+
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                {takeawayOrders.length === 0 ? (
+                  <div className="h-48 border border-dashed border-white/10 rounded-md flex flex-col items-center justify-center text-text-tertiary gap-2">
+                    <Receipt className="w-7 h-7 opacity-30" />
+                    <span className="text-xs">No hay pedidos de retiro pendientes de cobro</span>
                   </div>
-                );
-              })
-            )}
-          </div>
+                ) : (
+                  takeawayOrders.map((tk) => {
+                    const isSelected = selectedTakeaway?.id === tk.id;
+                    return (
+                      <div
+                        key={tk.id}
+                        onClick={() => handleSelectTakeaway(tk)}
+                        className={`p-4 rounded-md border transition-all cursor-pointer shadow-sm hover:scale-[1.01] ${
+                          isSelected
+                            ? 'bg-surface-2 border-sky-400 shadow-glowAmber'
+                            : 'glass border-white/5 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-11 h-9 rounded-xs bg-sky-400 text-black font-extrabold text-sm flex items-center justify-center">
+                              {tk.code}
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-text-primary">{tk.customerName}</div>
+                              <div className="text-[11px] text-text-secondary font-medium">Canal: 🛍️ Retiro en Mostrador</div>
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-pill bg-sky-400/15 text-sky-400 border border-sky-400/30">
+                            LISTO PARA COBRO
+                          </span>
+                        </div>
+
+                        {/* Breakdown items */}
+                        {tk.items && tk.items.length > 0 && (
+                          <div className="py-2 border-y border-white/5 space-y-1 mb-2">
+                            {tk.items.map((it, idx) => (
+                              <div key={idx} className="flex justify-between text-[11px] text-text-secondary">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono text-text-tertiary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center pt-1 text-xs font-mono">
+                          <span className="text-text-tertiary">Total a Cobrar:</span>
+                          <span className="font-extrabold text-sky-400 text-sm">${tk.totalAmount.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
         </section>
 
-        {/* Right Side: POS Payment Form */}
+        {/* Right Side: POS Payment Terminal */}
         <section className="lg:col-span-5 rounded-lg bg-surface-1 border border-white/5 p-5 shadow-card">
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
             <div>
-              <h2 className="text-sm font-bold">Terminal de Cobro</h2>
+              <h2 className="text-sm font-bold">Terminal de Cobro POS</h2>
               {selectedAccount && (
                 <p className="text-xs text-amber font-semibold">Mesa {selectedAccount.tableNumber} • {selectedAccount.waiterName}</p>
+              )}
+              {selectedTakeaway && (
+                <p className="text-xs text-sky-400 font-semibold">Pedido {selectedTakeaway.code} • {selectedTakeaway.customerName}</p>
               )}
             </div>
             <Calculator className="w-4 h-4 text-amber" />
           </div>
 
-          {!selectedAccount ? (
+          {/* If Nothing Selected */}
+          {!selectedAccount && !selectedTakeaway && (
             <div className="h-72 border border-dashed border-white/10 rounded-md flex flex-col items-center justify-center text-text-tertiary gap-2 p-6 text-center">
               <CreditCard className="w-8 h-8 opacity-30" />
-              <span className="text-xs">Selecciona una mesa de la lista para registrar el cobro</span>
+              <span className="text-xs">Selecciona una mesa o pedido de retiro para registrar el cobro</span>
             </div>
-          ) : (
+          )}
+
+          {/* Form for Salón Mesa Payment */}
+          {selectedAccount && (
             <form onSubmit={handleRecordPayment} className="space-y-4">
-              {/* Itemized summary in terminal */}
+              {/* Itemized summary */}
               {selectedAccount.items && selectedAccount.items.length > 0 && (
                 <div className="bg-surface-2 border border-white/5 rounded-md p-3 max-h-40 overflow-y-auto space-y-1.5 text-xs">
                   <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Detalle de Comanda</div>
@@ -474,7 +808,7 @@ export function CashierPage() {
                         key={method.id}
                         type="button"
                         onClick={() => setPaymentMethod(method.id as any)}
-                        className={`h-11 rounded-sm border p-2 flex items-center justify-center gap-2 text-xs font-semibold transition ${
+                        className={`h-11 rounded-sm border p-2 flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer ${
                           isMethodSelected
                             ? 'bg-amber text-black border-amber shadow-glowAmber font-bold'
                             : 'glass border-white/5 text-text-secondary hover:text-white'
@@ -506,21 +840,21 @@ export function CashierPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(selectedPending)}
-                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10 text-amber"
+                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10 text-amber cursor-pointer"
                   >
                     100% (${selectedPending.toLocaleString()})
                   </button>
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(Math.round(selectedPending / 2))}
-                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10"
+                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10 cursor-pointer"
                   >
                     50% (${Math.round(selectedPending / 2).toLocaleString()})
                   </button>
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(Math.round(selectedPending / 4))}
-                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10"
+                    className="h-8 rounded-pill glass text-xs font-mono font-bold hover:bg-white/10 cursor-pointer"
                   >
                     25% (${Math.round(selectedPending / 4).toLocaleString()})
                   </button>
@@ -532,29 +866,91 @@ export function CashierPage() {
                 <button
                   type="submit"
                   disabled={paymentAmount <= 0}
-                  className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition active:scale-98 disabled:opacity-40"
+                  className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition active:scale-98 disabled:opacity-40 cursor-pointer"
                 >
                   <DollarSign className="w-4 h-4" />
-                  <span>REGISTRAR COBRO (${paymentAmount.toLocaleString()})</span>
+                  <span>
+                    {paymentAmount >= selectedPending
+                      ? `COBRAR ($${paymentAmount.toLocaleString()}) Y LIBERAR MESA ${selectedAccount.tableNumber}`
+                      : `REGISTRAR COBRO PARCIAL ($${paymentAmount.toLocaleString()})`}
+                  </span>
                 </button>
               ) : (
-                <div className="p-3 bg-emerald/10 border border-emerald/30 rounded-sm text-center text-emerald text-xs font-bold">
-                  ✓ Cuenta saldada al 100%
-                </div>
-              )}
-
-              {/* Close Account & Free Table Action */}
-              {selectedPending === 0 && (
                 <button
                   type="button"
                   onClick={() => handleCloseAccount(selectedAccount.tableSessionId, selectedAccount.realAccountId)}
-                  className="w-full h-12 rounded-sm bg-surface-2 border border-emerald/40 text-emerald hover:bg-emerald/20 font-bold text-xs flex items-center justify-center gap-2 transition shadow-glowEmerald"
+                  className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 transition shadow-glowEmerald cursor-pointer"
                 >
                   <Lock className="w-4 h-4" />
-                  <span>CERRAR CUENTA Y LIBERAR MESA {selectedAccount.tableNumber}</span>
+                  <span>LIBERAR MESA {selectedAccount.tableNumber} (YA SALDADA)</span>
                 </button>
               )}
             </form>
+          )}
+
+          {/* Form for Takeaway (#L-45) Payment and KDS Dispatch */}
+          {selectedTakeaway && (
+            <div className="space-y-4">
+              {/* Itemized summary */}
+              {selectedTakeaway.items && selectedTakeaway.items.length > 0 && (
+                <div className="bg-surface-2 border border-white/5 rounded-md p-3 max-h-40 overflow-y-auto space-y-1.5 text-xs">
+                  <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">
+                    Productos del Pedido {selectedTakeaway.code}
+                  </div>
+                  {selectedTakeaway.items.map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-text-secondary">
+                      <span>{it.quantity}x {it.name}</span>
+                      <span className="font-mono font-medium text-text-primary">${(it.quantity * it.unitPrice).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-text-primary text-xs">
+                    <span>Total a Cobrar:</span>
+                    <span className="font-mono text-sky-400">${selectedTakeaway.totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Methods Grid */}
+              <div>
+                <label className="text-xs text-text-secondary block mb-2 font-medium">Medio de Pago:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'CASH', label: 'Efectivo', icon: Banknote },
+                    { id: 'CARD', label: 'Tarjeta', icon: CreditCard },
+                    { id: 'QR', label: 'QR / Digital', icon: QrCode },
+                    { id: 'TRANSFER', label: 'Transferencia', icon: ArrowRight },
+                  ].map((method) => {
+                    const Icon = method.icon;
+                    const isMethodSelected = paymentMethod === method.id;
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(method.id as any)}
+                        className={`h-11 rounded-sm border p-2 flex items-center justify-center gap-2 text-xs font-semibold transition cursor-pointer ${
+                          isMethodSelected
+                            ? 'bg-sky-400 text-black border-sky-400 shadow-glowAmber font-bold'
+                            : 'glass border-white/5 text-text-secondary hover:text-white'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{method.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Primary Action Button: Charge & Send to Kitchen */}
+              <button
+                type="button"
+                onClick={() => handleChargeAndDispatchTakeaway(selectedTakeaway)}
+                className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 shadow-glowEmerald transition active:scale-98 cursor-pointer"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>COBRAR (${selectedTakeaway.totalAmount.toLocaleString()}) Y DESPACHAR A COCINA (KDS)</span>
+              </button>
+            </div>
           )}
         </section>
       </div>

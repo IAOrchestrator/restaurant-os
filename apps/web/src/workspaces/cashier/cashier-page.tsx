@@ -211,11 +211,16 @@ export function CashierPage() {
 
   const handleCloseAccount = async (tableSessionId: string, realAccountId?: string | null) => {
     setMsg(null);
+    let success = false;
+
     if (realAccountId) {
-      await request(`/api/billing/accounts/${realAccountId}/close`, {
+      const closeAccRes = await request(`/api/billing/accounts/${realAccountId}/close`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
+      if (closeAccRes.data) {
+        success = true;
+      }
     }
 
     const res = await request(`/api/table-sessions/${tableSessionId}/close`, {
@@ -223,12 +228,12 @@ export function CashierPage() {
       body: JSON.stringify({}),
     });
 
-    if (res.error) {
-      setMsg({ type: 'error', text: res.error });
-    } else {
+    if (res.data || success) {
       setMsg({ type: 'success', text: '🔒 Cuenta cerrada y mesa liberada con éxito en todo el restaurante.' });
       setSelectedAccount(null);
       fetchAccounts();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Error al cerrar cuenta y liberar mesa' });
     }
   };
 

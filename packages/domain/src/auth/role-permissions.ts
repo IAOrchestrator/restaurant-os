@@ -68,6 +68,9 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
   ],
   [StaffRole.WAITER]: [
     Permission.TABLES_READ,
+    Permission.TABLES_ASSIGN,
+    Permission.TABLES_OCCUPY,
+    Permission.TABLES_RELEASE,
     Permission.TABLE_SESSIONS_READ,
     Permission.TABLE_SESSIONS_MANAGE,
     Permission.TABLE_SESSIONS_CHANGE_WAITER,
@@ -81,6 +84,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
     Permission.PREORDERS_UPDATE,
     Permission.ACCOUNTS_READ,
     Permission.ACCOUNTS_REQUEST_PAYMENT,
+    Permission.ACCOUNTS_CLOSE,
     Permission.SERVICE_TASKS_READ,
     Permission.SERVICE_TASKS_MANAGE,
     Permission.REVIEWS_READ,
@@ -93,6 +97,9 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
     Permission.KITCHEN_ORDERS_READY,
     Permission.KITCHEN_ORDERS_COMPLETE,
     Permission.ORDERS_READ,
+    Permission.TABLES_READ,
+    Permission.TABLE_SESSIONS_READ,
+    Permission.CATALOG_READ,
     Permission.SERVICE_TASKS_READ,
   ],
   [StaffRole.CASHIER]: [
@@ -103,7 +110,13 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
     Permission.PAYMENTS_READ,
     Permission.ORDERS_READ,
     Permission.TABLE_SESSIONS_READ,
+    Permission.TABLE_SESSIONS_MANAGE,
+    Permission.TABLES_READ,
+    Permission.TABLES_RELEASE,
+    Permission.STAFF_READ,
+    Permission.CATALOG_READ,
     Permission.SERVICE_TASKS_READ,
+    Permission.SERVICE_TASKS_MANAGE,
   ],
 };
 

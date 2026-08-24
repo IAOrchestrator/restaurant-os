@@ -16,6 +16,9 @@ import {
   ShoppingBag,
   Sparkles,
   Receipt,
+  Lock,
+  DollarSign,
+  CheckCircle2,
 } from 'lucide-react';
 
 export interface TableSessionItem {
@@ -77,17 +80,23 @@ export function WaiterPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  // Selected table ID (persistent regardless of session changes)
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
-  
-  // Isolated draft cart per table session ID
-  const [cartsBySession, setCartsBySession] = useState<Record<string, Array<{ product: CatalogProduct; quantity: number; notes: string }>>>({});
-  
+
+  // Isolated draft cart per table ID
+  const [cartsByTable, setCartsByTable] = useState<
+    Record<string, Array<{ product: CatalogProduct; quantity: number; notes: string }>>
+  >({});
+
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [readyAlert, setReadyAlert] = useState<{ taskOrOrderId: string; tableNumber: number; text: string } | null>(null);
+  const [readyAlert, setReadyAlert] = useState<{ taskOrOrderId: string; tableNumber: number; text: string } | null>(
+    null,
+  );
   const [isHandoverOpen, setIsHandoverOpen] = useState(false);
   const [targetWaiterId, setTargetWaiterId] = useState<string>('');
-  const [isReleasingTable, setIsReleasingTable] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Active waiter in this terminal
   const [currentWaiterId, setCurrentWaiterId] = useState<string>(actorId || '');
@@ -96,16 +105,17 @@ export function WaiterPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionsRes, tablesRes, staffRes, categoriesRes, productsRes, tasksRes, ordersRes, accountsRes] = await Promise.all([
-        request<TableSessionItem[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
-        request<TableItem[]>(`/api/tables?restaurantId=${restaurantId}`),
-        request<StaffItem[]>(`/api/staff?restaurantId=${restaurantId}&role=WAITER`),
-        request<CatalogCategory[]>(`/api/catalog/categories?restaurantId=${restaurantId}`),
-        request<CatalogProduct[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
-        request<ServiceTaskItem[]>(`/api/service/tasks?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
-      ]);
+      const [sessionsRes, tablesRes, staffRes, categoriesRes, productsRes, tasksRes, ordersRes, accountsRes] =
+        await Promise.all([
+          request<TableSessionItem[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
+          request<TableItem[]>(`/api/tables?restaurantId=${restaurantId}`),
+          request<StaffItem[]>(`/api/staff?restaurantId=${restaurantId}&role=WAITER`),
+          request<CatalogCategory[]>(`/api/catalog/categories?restaurantId=${restaurantId}`),
+          request<CatalogProduct[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
+          request<ServiceTaskItem[]>(`/api/service/tasks?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+          request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
+        ]);
 
       const catMap: Record<string, string> = {};
       if (categoriesRes.data) {
@@ -118,14 +128,16 @@ export function WaiterPage() {
       if (sessionsRes.data) {
         const activeSessions = sessionsRes.data.filter((s) => s.status !== 'CLOSED');
         setSessions(activeSessions);
-        if (!selectedSessionId && activeSessions.length > 0) {
-          const mine = activeSessions.find((s) => s.currentWaiterId === currentWaiterId);
-          setSelectedSessionId(mine ? mine.id : activeSessions[0].id);
+      }
+      if (tablesRes.data) {
+        const sortedTables = tablesRes.data.sort((a, b) => a.number - b.number);
+        setTables(sortedTables);
+        if (!selectedTableId && sortedTables.length > 0) {
+          setSelectedTableId(sortedTables[0].id);
         }
       }
-      if (tablesRes.data) setTables(tablesRes.data);
       if (staffRes.data) setWaiters(staffRes.data);
-      if (ordersRes.data) setOrders(ordersRes.data);
+      if (ordersRes.data) setOrders(ordersRes.data.filter((o) => o.status !== 'CANCELLED'));
       if (accountsRes.data) setAccounts(accountsRes.data);
       if (productsRes.data) {
         const mappedProducts = productsRes.data
@@ -142,7 +154,7 @@ export function WaiterPage() {
     } finally {
       setLoading(false);
     }
-  }, [request, restaurantId, currentWaiterId, selectedSessionId]);
+  }, [request, restaurantId, selectedTableId]);
 
   useEffect(() => {
     fetchData();
@@ -155,12 +167,13 @@ export function WaiterPage() {
     }
   }, [actorId, currentWaiterId]);
 
-  // Real-time SSE Alerts
+  // Real-time SSE
   useSse({
     token: authToken,
     eventTypes: [
       'TABLE_ASSIGNED',
       'TABLE_CHANGED',
+      'TABLE_RELEASED',
       'WAITER_CHANGED',
       'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
@@ -168,6 +181,7 @@ export function WaiterPage() {
       'ORDER_READY',
       'ORDER_DELIVERED',
       'SERVICE_TASK_CREATED',
+      'PAYMENT_REGISTERED',
       'TABLE_CLOSED',
       'ACCOUNT_CLOSED',
     ],
@@ -187,13 +201,13 @@ export function WaiterPage() {
     },
   });
 
-  const tableMap = (tables || []).reduce<Record<string, number>>((acc, t) => {
-    acc[t.id] = t.number;
+  const waiterMap = (waiters || []).reduce<Record<string, string>>((acc, w) => {
+    acc[w.id] = w.name;
     return acc;
   }, {});
 
-  const waiterMap = (waiters || []).reduce<Record<string, string>>((acc, w) => {
-    acc[w.id] = w.name;
+  const sessionByTableId = (sessions || []).reduce<Record<string, TableSessionItem>>((acc, s) => {
+    acc[s.tableId] = s;
     return acc;
   }, {});
 
@@ -203,28 +217,29 @@ export function WaiterPage() {
     setCurrentWaiterId(waiterId);
   };
 
-  const filteredSessions = (sessions || []).filter((s) => {
-    if (tableFilter === 'MINE') {
-      return s.currentWaiterId === currentWaiterId;
-    }
-    return true;
-  });
-
-  const selectedSession = sessions.find((s) => s.id === selectedSessionId);
-  const selectedTableNumber = selectedSession ? tableMap[selectedSession.tableId] || '?' : null;
+  // Selected table & session context
+  const selectedTable = tables.find((t) => t.id === selectedTableId) || tables[0];
+  const selectedSession = selectedTable ? sessionByTableId[selectedTable.id] : null;
 
   // Selected session active consumption
-  const sessionOrders = selectedSessionId
-    ? (orders || []).filter((o) => o.tableSessionId === selectedSessionId && o.status !== 'CANCELLED')
+  const sessionOrders = selectedSession
+    ? (orders || []).filter((o) => o.tableSessionId === selectedSession.id)
     : [];
-  const sessionAccount = selectedSessionId
-    ? (accounts || []).find((a) => a.tableSessionId === selectedSessionId && a.status !== 'CLOSED')
+
+  const sessionAccount = selectedSession
+    ? (accounts || []).find((a) => a.tableSessionId === selectedSession.id && a.status !== 'CLOSED')
     : null;
-  const totalConsumption = sessionAccount?.totalAmount ?? sessionOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const totalConsumption =
+    sessionAccount?.totalAmount ?? sessionOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const paidAmount = sessionAccount?.paidAmount ?? 0;
+  const isFullyPaidInCashier =
+    Boolean(sessionAccount) && (sessionAccount.status === 'PAID' || (totalConsumption > 0 && paidAmount >= totalConsumption));
+
   const hasConsumption = sessionOrders.length > 0 || totalConsumption > 0;
 
   // Current draft cart for selected table
-  const currentCart = selectedSessionId ? cartsBySession[selectedSessionId] || [] : [];
+  const currentCart = selectedTable ? cartsByTable[selectedTable.id] || [] : [];
   const cartTotal = currentCart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   // Categories list
@@ -235,6 +250,7 @@ export function WaiterPage() {
       (name) => !categoriesList.some((c) => c.name === name),
     ),
   ];
+
   const filteredProducts = products.filter((p) => {
     if (selectedCategory === 'Todos') return true;
     return (p.categoryName || 'General') === selectedCategory;
@@ -242,9 +258,9 @@ export function WaiterPage() {
 
   // Cart operations per table
   const addToCart = (product: CatalogProduct) => {
-    if (!selectedSessionId) return;
-    setCartsBySession((prev) => {
-      const tableCart = prev[selectedSessionId] || [];
+    if (!selectedTable) return;
+    setCartsByTable((prev) => {
+      const tableCart = prev[selectedTable.id] || [];
       const existing = tableCart.find((item) => item.product.id === product.id);
       let updatedCart;
       if (existing) {
@@ -254,14 +270,14 @@ export function WaiterPage() {
       } else {
         updatedCart = [...tableCart, { product, quantity: 1, notes: '' }];
       }
-      return { ...prev, [selectedSessionId]: updatedCart };
+      return { ...prev, [selectedTable.id]: updatedCart };
     });
   };
 
   const updateCartQty = (productId: string, delta: number) => {
-    if (!selectedSessionId) return;
-    setCartsBySession((prev) => {
-      const tableCart = prev[selectedSessionId] || [];
+    if (!selectedTable) return;
+    setCartsByTable((prev) => {
+      const tableCart = prev[selectedTable.id] || [];
       const updatedCart = tableCart
         .map((item) => {
           if (item.product.id === productId) {
@@ -271,18 +287,59 @@ export function WaiterPage() {
           return item;
         })
         .filter(Boolean) as Array<{ product: CatalogProduct; quantity: number; notes: string }>;
-      return { ...prev, [selectedSessionId]: updatedCart };
+      return { ...prev, [selectedTable.id]: updatedCart };
     });
+  };
+
+  // Open Table Session (Occupy table)
+  const handleOpenTable = async (tableId: string) => {
+    setMsg(null);
+    setIsProcessing(true);
+    const res = await request<TableSessionItem>('/api/table-sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        restaurantId,
+        tableId,
+        initialWaiterId: currentWaiterId,
+      }),
+    });
+    setIsProcessing(false);
+
+    if (res.data) {
+      setMsg({ type: 'success', text: `✨ Mesa #${selectedTable?.number} ocupada para comanda.` });
+      fetchData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Error al abrir mesa' });
+    }
   };
 
   // Submit Comanda
   const handleSendToKitchen = async () => {
-    if (!selectedSessionId || currentCart.length === 0) return;
+    if (!selectedTable || currentCart.length === 0) return;
     setMsg(null);
+
+    // If table session doesn't exist yet, open it automatically
+    let targetSessionId = selectedSession?.id;
+    if (!targetSessionId) {
+      const openRes = await request<TableSessionItem>('/api/table-sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          restaurantId,
+          tableId: selectedTable.id,
+          initialWaiterId: currentWaiterId,
+        }),
+      });
+      if (openRes.data) {
+        targetSessionId = openRes.data.id;
+      } else {
+        setMsg({ type: 'error', text: openRes.error || 'Error al iniciar sesión de mesa' });
+        return;
+      }
+    }
 
     const payload = {
       restaurantId,
-      tableSessionId: selectedSessionId,
+      tableSessionId: targetSessionId,
       items: currentCart.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
@@ -300,11 +357,11 @@ export function WaiterPage() {
       await request(`/api/orders/${(res.data as any).id}/send-to-kitchen`, {
         method: 'POST',
       });
-      setMsg({ type: 'success', text: `¡Comanda enviada a cocina para Mesa ${selectedTableNumber}!` });
-      // Clear cart only for this table
-      setCartsBySession((prev) => {
+      setMsg({ type: 'success', text: `¡Comanda enviada a cocina para Mesa ${selectedTable.number}!` });
+      // Clear cart for this table
+      setCartsByTable((prev) => {
         const copy = { ...prev };
-        delete copy[selectedSessionId];
+        delete copy[selectedTable.id];
         return copy;
       });
       fetchData();
@@ -315,46 +372,47 @@ export function WaiterPage() {
 
   // Request Bill to Cashier
   const handleRequestBill = async () => {
-    if (!selectedSessionId) return;
+    if (!selectedSession) return;
     setMsg(null);
     const res = await request('/api/service/tasks', {
       method: 'POST',
       body: JSON.stringify({
         restaurantId,
-        tableSessionId: selectedSessionId,
+        tableSessionId: selectedSession.id,
         type: 'CHECK_ACCOUNT',
-        notes: `Mesa ${selectedTableNumber} solicita cuenta por $${totalConsumption.toLocaleString()}`,
+        notes: `Mesa ${selectedTable?.number} solicita cuenta por $${totalConsumption.toLocaleString()}`,
       }),
     });
     if (res.data) {
-      setMsg({ type: 'success', text: `🧾 Cuenta de Mesa ${selectedTableNumber} derivada a Caja para cobro.` });
+      setMsg({ type: 'success', text: `🧾 Cuenta de Mesa ${selectedTable?.number} derivada a Caja para cobro.` });
       fetchData();
     } else {
-      setMsg({ type: 'error', text: res.error || 'Error al solicitar cuenta' });
+      setMsg({ type: 'error', text: res.error || 'Error al derivar cuenta a Caja' });
     }
   };
 
-  // Release table without consumption
-  const handleReleaseTableWithoutConsumption = async () => {
-    if (!selectedSessionId) return;
-    if (hasConsumption) {
-      setMsg({
-        type: 'error',
-        text: `No se puede cancelar Mesa ${selectedTableNumber}: tiene consumos activos ($${totalConsumption.toLocaleString()}). El cobro y cierre debe realizarse en Caja.`,
+  // Release table (Without consumption or Paid in Cashier)
+  const handleReleaseTable = async () => {
+    if (!selectedSession) return;
+    setMsg(null);
+    setIsProcessing(true);
+
+    // If account exists and is paid, close account too
+    if (sessionAccount?.id) {
+      await request(`/api/billing/accounts/${sessionAccount.id}/close`, {
+        method: 'POST',
+        body: JSON.stringify({}),
       });
-      return;
     }
 
-    setIsReleasingTable(true);
-    const res = await request(`/api/table-sessions/${selectedSessionId}/close`, {
+    const res = await request(`/api/table-sessions/${selectedSession.id}/close`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
-    setIsReleasingTable(false);
+    setIsProcessing(false);
 
     if (res.data) {
-      setMsg({ type: 'success', text: `Mesa ${selectedTableNumber} liberada correctamente (sin consumo).` });
-      setSelectedSessionId(null);
+      setMsg({ type: 'success', text: `🔒 Mesa #${selectedTable?.number} liberada y limpia exitosamente.` });
       fetchData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Error al liberar la mesa' });
@@ -363,8 +421,8 @@ export function WaiterPage() {
 
   // Handover table
   const handleHandover = async () => {
-    if (!selectedSessionId || !targetWaiterId) return;
-    const res = await request(`/api/table-sessions/${selectedSessionId}/change-waiter`, {
+    if (!selectedSession || !targetWaiterId) return;
+    const res = await request(`/api/table-sessions/${selectedSession.id}/change-waiter`, {
       method: 'POST',
       body: JSON.stringify({ newWaiterId: targetWaiterId }),
     });
@@ -378,7 +436,7 @@ export function WaiterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-text-primary p-4 max-w-[480px] mx-auto relative pb-32">
+    <div className="min-h-screen bg-background text-text-primary p-4 max-w-[480px] mx-auto relative pb-36">
       {/* Ready Alert Top Toast */}
       {readyAlert && (
         <div className="glass-strong border border-emerald/40 rounded-md p-3 mb-4 flex items-center justify-between shadow-glowEmerald animate-slide-in">
@@ -420,7 +478,7 @@ export function WaiterPage() {
                 onClick={() => handleSelectWaiterTerminal(w.id)}
                 className={`h-7 px-2.5 rounded-pill text-xs font-medium transition ${
                   currentWaiterId === w.id
-                    ? 'bg-amber text-black font-bold'
+                    ? 'bg-amber text-black font-bold shadow-sm'
                     : 'bg-surface-2 text-text-secondary hover:text-white'
                 }`}
               >
@@ -447,7 +505,7 @@ export function WaiterPage() {
                 tableFilter === 'ALL' ? 'bg-white text-black font-bold' : 'text-text-secondary hover:text-white'
               }`}
             >
-              Todas ({sessions.length})
+              Todas ({tables.length})
             </button>
           </div>
           <button
@@ -464,87 +522,141 @@ export function WaiterPage() {
       {/* Mesas Chips Slider */}
       <section className="mb-4">
         <div className="text-[11px] uppercase tracking-widest text-text-tertiary font-semibold mb-2">
-          Seleccionar Mesa
+          Seleccionar Mesa del Salón
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {filteredSessions.length === 0 ? (
-            <div className="text-xs text-text-tertiary p-2">Sin mesas activas en esta vista</div>
-          ) : (
-            filteredSessions.map((session) => {
-              const num = tableMap[session.tableId] || '?';
-              const isSelected = selectedSessionId === session.id;
-              const isMine = session.currentWaiterId === currentWaiterId;
-
-              return (
-                <button
-                  key={session.id}
-                  onClick={() => setSelectedSessionId(session.id)}
-                  className={`shrink-0 h-10 px-3.5 rounded-pill flex items-center gap-2 text-xs font-semibold border transition active:scale-95 ${
-                    isSelected
-                      ? 'bg-amber text-black border-amber shadow-glowAmber'
-                      : isMine
-                      ? 'bg-surface-2 text-text-primary border-white/10'
-                      : 'glass text-text-secondary border-white/5'
-                  }`}
-                >
-                  <span>Mesa {num}</span>
-                  <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-black' : isMine ? 'bg-emerald' : 'bg-white/30'}`} />
-                </button>
+          {tables.map((table) => {
+            const session = sessionByTableId[table.id];
+            const isSelected = selectedTableId === table.id;
+            const isMine = session?.currentWaiterId === currentWaiterId;
+            const isOccupied = Boolean(session);
+            const isTablePaid =
+              isOccupied &&
+              accounts.some(
+                (a) => a.tableSessionId === session?.id && (a.status === 'PAID' || a.paidAmount >= a.totalAmount && a.totalAmount > 0),
               );
-            })
-          )}
+
+            if (tableFilter === 'MINE' && isOccupied && !isMine) {
+              return null;
+            }
+
+            return (
+              <button
+                key={table.id}
+                onClick={() => setSelectedTableId(table.id)}
+                className={`shrink-0 h-10 px-3.5 rounded-pill flex items-center gap-2 text-xs font-semibold border transition active:scale-95 ${
+                  isSelected
+                    ? 'bg-amber text-black border-amber shadow-glowAmber font-bold'
+                    : isTablePaid
+                    ? 'bg-emerald/20 text-emerald border-emerald/40'
+                    : isOccupied
+                    ? 'bg-surface-2 text-text-primary border-amber/30'
+                    : 'glass text-text-secondary border-white/5'
+                }`}
+              >
+                <span>Mesa {table.number}</span>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isSelected
+                      ? 'bg-black'
+                      : isTablePaid
+                      ? 'bg-emerald animate-pulse'
+                      : isOccupied
+                      ? 'bg-amber'
+                      : 'bg-emerald/60'
+                  }`}
+                />
+              </button>
+            );
+          })}
         </div>
       </section>
 
       {/* Selected Table Actions Bar */}
-      {selectedSession && (
+      {selectedTable && (
         <div className="glass rounded-md p-3.5 mb-4 shadow-card">
           <div className="flex items-center justify-between gap-2 mb-2.5">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold">Mesa {selectedTableNumber}</span>
-                {hasConsumption ? (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-pill bg-amber/15 text-amber border border-amber/30">
-                    CON CONSUMO (${totalConsumption.toLocaleString()})
+                <span className="text-base font-bold">Mesa {selectedTable.number}</span>
+                {isFullyPaidInCashier ? (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-pill bg-emerald text-white shadow-glowEmerald">
+                    💰 PAGADA EN CAJA (${totalConsumption.toLocaleString()})
                   </span>
+                ) : selectedSession ? (
+                  hasConsumption ? (
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-pill bg-amber/15 text-amber border border-amber/30">
+                      CON CONSUMO (${totalConsumption.toLocaleString()})
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-pill bg-white/10 text-text-secondary">
+                      OCUPADA (SIN CONSUMO)
+                    </span>
+                  )
                 ) : (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald border border-emerald/30">
-                    SIN CONSUMO
+                    LIBRE / DISPONIBLE
                   </span>
                 )}
               </div>
               <div className="text-[11px] text-text-tertiary mt-0.5">
-                Mozo: {waiterMap[selectedSession.currentWaiterId] || 'Asignado'}
+                {selectedSession
+                  ? `Mozo a cargo: ${waiterMap[selectedSession.currentWaiterId] || 'Mozo'}`
+                  : `Capacidad: ${selectedTable.capacity} comensales`}
               </div>
             </div>
 
+            {/* Action Buttons */}
             <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setIsHandoverOpen(true)}
-                className="h-8 px-2.5 rounded-pill glass hover:bg-white/10 text-xs font-semibold flex items-center gap-1 text-text-secondary hover:text-white"
-                title="Traspasar mesa a otro mozo"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Traspasar</span>
-              </button>
+              {selectedSession ? (
+                <>
+                  <button
+                    onClick={() => setIsHandoverOpen(true)}
+                    className="h-8 px-2.5 rounded-pill glass hover:bg-white/10 text-xs font-semibold flex items-center gap-1 text-text-secondary hover:text-white"
+                    title="Traspasar mesa a otro mozo"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    <span>Traspasar</span>
+                  </button>
 
-              {!hasConsumption ? (
-                <button
-                  onClick={handleReleaseTableWithoutConsumption}
-                  disabled={isReleasingTable}
-                  className="h-8 px-3 rounded-pill bg-crimson/15 border border-crimson/30 hover:bg-crimson/25 text-crimson text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
-                  title="El cliente se levantó sin pedir nada"
-                >
-                  <span>Liberar Mesa</span>
-                </button>
+                  {isFullyPaidInCashier ? (
+                    <button
+                      onClick={handleReleaseTable}
+                      disabled={isProcessing}
+                      className="h-8 px-3 rounded-pill bg-emerald text-white hover:bg-emerald-muted text-xs font-bold flex items-center gap-1.5 shadow-glowEmerald transition active:scale-95"
+                      title="Liberar mesa cobrada"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Liberar Mesa</span>
+                    </button>
+                  ) : !hasConsumption ? (
+                    <button
+                      onClick={handleReleaseTable}
+                      disabled={isProcessing}
+                      className="h-8 px-3 rounded-pill bg-crimson/15 border border-crimson/30 hover:bg-crimson/25 text-crimson text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
+                      title="El cliente se levantó sin pedir nada"
+                    >
+                      <span>Liberar Mesa</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleRequestBill}
+                      className="h-8 px-3 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95"
+                      title="Enviar aviso a Caja para preparar cobro"
+                    >
+                      <Receipt className="w-3.5 h-3.5" />
+                      <span>Derivar a Caja</span>
+                    </button>
+                  )}
+                </>
               ) : (
                 <button
-                  onClick={handleRequestBill}
-                  className="h-8 px-3 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95"
-                  title="Enviar aviso a Caja para preparar cobro"
+                  onClick={() => handleOpenTable(selectedTable.id)}
+                  disabled={isProcessing}
+                  className="h-8 px-3.5 rounded-pill bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center gap-1 shadow-glowEmerald transition active:scale-95"
                 >
-                  <Receipt className="w-3.5 h-3.5" />
-                  <span>Derivar a Caja</span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ocupar Mesa</span>
                 </button>
               )}
             </div>
@@ -556,13 +668,29 @@ export function WaiterPage() {
               <div className="text-[10px] uppercase font-bold tracking-wider text-text-tertiary mb-1">
                 Consumos en curso ({sessionOrders.length} comandas):
               </div>
-              <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
                 {sessionOrders.map((ord: any) => (
-                  <div key={ord.id} className="flex items-center justify-between text-[11px] bg-surface-2 rounded px-2 py-1">
+                  <div
+                    key={ord.id}
+                    className="flex items-center justify-between text-[11px] bg-surface-2 rounded px-2 py-1"
+                  >
                     <span className="truncate max-w-[200px] text-text-secondary">
-                      {ord.items?.map((i: any) => `${i.quantity}x ${products.find((p) => p.id === i.productId)?.name || 'Plato'}`).join(', ')}
+                      {ord.items
+                        ?.map(
+                          (i: any) =>
+                            `${i.quantity}x ${products.find((p) => p.id === i.productId)?.name || i.productId}`,
+                        )
+                        .join(', ')}
                     </span>
-                    <span className={`font-mono font-bold ${ord.status === 'DELIVERED' ? 'text-emerald' : 'text-amber'}`}>
+                    <span
+                      className={`font-mono font-bold ${
+                        isFullyPaidInCashier
+                          ? 'text-emerald'
+                          : ord.status === 'DELIVERED'
+                          ? 'text-emerald'
+                          : 'text-amber'
+                      }`}
+                    >
                       ${ord.totalAmount?.toLocaleString()}
                     </span>
                   </div>
@@ -574,9 +702,9 @@ export function WaiterPage() {
       )}
 
       {/* Handover Modal */}
-      {isHandoverOpen && (
+      {isHandoverOpen && selectedSession && (
         <div className="glass-strong border border-amber/30 rounded-lg p-4 mb-4 shadow-card animate-slide-in">
-          <div className="text-sm font-bold mb-2">Traspasar Mesa {selectedTableNumber}</div>
+          <div className="text-sm font-bold mb-2">Traspasar Mesa {selectedTable?.number}</div>
           <p className="text-xs text-text-secondary mb-3">Selecciona el mozo que tomará la atención:</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {waiters
@@ -586,7 +714,7 @@ export function WaiterPage() {
                   key={w.id}
                   onClick={() => setTargetWaiterId(w.id)}
                   className={`h-9 px-3 rounded-xs text-xs font-semibold border transition ${
-                    targetWaiterId === w.id ? 'bg-amber text-black border-amber' : 'bg-surface-2 border-white/5'
+                    targetWaiterId === w.id ? 'bg-amber text-black border-amber font-bold' : 'bg-surface-2 border-white/5'
                   }`}
                 >
                   {w.name}
@@ -614,7 +742,7 @@ export function WaiterPage() {
       {/* Messages */}
       {msg && (
         <div
-          className={`p-3 rounded-md mb-4 text-xs font-medium flex items-center gap-2 ${
+          className={`p-3 rounded-md mb-4 text-xs font-medium flex items-center gap-2 shadow-sm ${
             msg.type === 'success'
               ? 'bg-emerald/15 border border-emerald/30 text-emerald'
               : 'bg-crimson/15 border border-crimson/30 text-crimson'
@@ -632,7 +760,9 @@ export function WaiterPage() {
             key={c}
             onClick={() => setSelectedCategory(c)}
             className={`shrink-0 h-8 px-3.5 rounded-pill text-xs font-medium transition ${
-              selectedCategory === c ? 'bg-surface-2 text-white border border-white/20 font-bold' : 'text-text-tertiary hover:text-white'
+              selectedCategory === c
+                ? 'bg-surface-2 text-white border border-white/20 font-bold'
+                : 'text-text-tertiary hover:text-white'
             }`}
           >
             {c}
@@ -668,18 +798,25 @@ export function WaiterPage() {
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-amber" />
-              <span className="text-xs font-bold">Comanda Mesa {selectedTableNumber}</span>
-              <span className="text-[11px] text-text-tertiary">({currentCart.reduce((a, b) => a + b.quantity, 0)} ítems)</span>
+              <span className="text-xs font-bold">Comanda Mesa {selectedTable?.number}</span>
+              <span className="text-[11px] text-text-tertiary">
+                ({currentCart.reduce((a, b) => a + b.quantity, 0)} ítems)
+              </span>
             </div>
             <span className="text-mono text-sm font-bold text-amber">${cartTotal.toLocaleString()}</span>
           </div>
 
           <div className="max-h-28 overflow-y-auto space-y-1.5 mb-3 pr-1">
             {currentCart.map((item) => (
-              <div key={item.product.id} className="flex items-center justify-between bg-surface-2 rounded-xs px-2.5 py-1.5 text-xs">
+              <div
+                key={item.product.id}
+                className="flex items-center justify-between bg-surface-2 rounded-xs px-2.5 py-1.5 text-xs"
+              >
                 <span className="truncate max-w-[160px] font-medium">{item.product.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-mono text-[11px] text-text-secondary">${(item.product.price * item.quantity).toLocaleString()}</span>
+                  <span className="text-mono text-[11px] text-text-secondary">
+                    ${(item.product.price * item.quantity).toLocaleString()}
+                  </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => updateCartQty(item.product.id, -1)}

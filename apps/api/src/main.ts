@@ -187,6 +187,7 @@ async function bootstrap() {
     tableRepo,
     eventPublisher,
     txRunner,
+    productRepo,
   });
   await app.register(billingRoutes, {
     prefix: '/api/billing',
@@ -197,6 +198,7 @@ async function bootstrap() {
     tableRepo,
     eventPublisher,
     txRunner,
+    productRepo,
   });
   await app.register(catalogRoutes, { prefix: '/api/catalog', categoryRepo, productRepo, eventPublisher });
   await app.register(customerRoutes, { prefix: '/api/customers', customerRepo });

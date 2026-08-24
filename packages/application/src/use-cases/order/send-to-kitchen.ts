@@ -12,6 +12,7 @@ import type { OrderRepository } from '../../ports/order-repository';
 import type { KitchenOrderRepository } from '../../ports/kitchen-order-repository';
 import type { TableSessionRepository } from '../../ports/table-session-repository';
 import type { TableRepository } from '../../ports/table-repository';
+import type { ProductRepository } from '../../ports/product-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 import type { TransactionRunner } from '../../ports/transaction-runner';
 import { randomUUID } from 'crypto';
@@ -33,6 +34,7 @@ export class SendToKitchenUseCase {
     private readonly sessionRepo?: TableSessionRepository,
     private readonly tableRepo?: TableRepository,
     private readonly txRunner?: TransactionRunner,
+    private readonly productRepo?: ProductRepository,
   ) {}
 
   async execute(input: SendToKitchenInput): Promise<Result<Order, Error>> {
@@ -84,49 +86,12 @@ export class SendToKitchenUseCase {
       if (targetOrder.status === 'SENT_TO_KITCHEN') {
         // Idempotent retry: Order is already SENT_TO_KITCHEN
         finalOrder = targetOrder;
-        if (repos.kitchenOrderRepo) {
-          kitchenOrder = await repos.kitchenOrderRepo.findByOrderId(targetOrder.id);
-          if (!kitchenOrder) {
-            const created = KitchenOrder.create({
-              id: randomUUID(),
-              restaurantId: targetOrder.restaurantId,
-              orderId: targetOrder.id,
-              notes: input.notes ?? null,
-              priority: input.priority ?? 0,
-            });
-            if (!created.success) return err(created.error);
-            kitchenOrder = created.value;
-            await repos.kitchenOrderRepo.save(kitchenOrder);
-          } else {
-            isRetry = true;
-          }
-        }
       } else if (targetOrder.status === 'CONFIRMED') {
         const sent = targetOrder.sendToKitchen();
         if (!sent.success) {
           return err(sent.error);
         }
         finalOrder = sent.value;
-
-        if (repos.kitchenOrderRepo) {
-          const existingKO = await repos.kitchenOrderRepo.findByOrderId(finalOrder.id);
-          if (existingKO) {
-            kitchenOrder = existingKO;
-            isRetry = true;
-          } else {
-            const created = KitchenOrder.create({
-              id: randomUUID(),
-              restaurantId: finalOrder.restaurantId,
-              orderId: finalOrder.id,
-              notes: input.notes ?? null,
-              priority: input.priority ?? 0,
-            });
-            if (!created.success) return err(created.error);
-            kitchenOrder = created.value;
-            await repos.kitchenOrderRepo.save(kitchenOrder);
-          }
-        }
-
         await repos.orderRepo.save(finalOrder);
       } else {
         return err(
@@ -136,7 +101,7 @@ export class SendToKitchenUseCase {
         );
       }
 
-      // Lookup table context metadata for rich events
+      // Lookup table context metadata for rich events and ticket naming
       let tableId: string | null = null;
       let tableNumber: number | null = null;
       if (finalOrder.tableSessionId && repos.sessionRepo) {
@@ -145,6 +110,101 @@ export class SendToKitchenUseCase {
           tableId = session.tableId;
           const table = await repos.tableRepo.findById(tableId);
           tableNumber = table?.number ?? null;
+        }
+      }
+
+      const tableLabel = tableNumber ? `M${tableNumber}` : (finalOrder.type === 'TAKEAWAY' ? 'L-45' : 'ORD');
+
+      // Partition items by Sector (PIZZAS, BEBIDAS, HELADOS, CAFE)
+      const sectorMap: Record<string, Array<{ productId: string; name?: string; quantity: number; notes?: string }>> = {};
+
+      for (const item of finalOrder.items) {
+        let sector = 'PIZZAS';
+        let itemName = item.productId;
+
+        if (this.productRepo) {
+          try {
+            const prod = await this.productRepo.findById(item.productId);
+            if (prod) {
+              sector = prod.sectorKDS || 'PIZZAS';
+              itemName = prod.name;
+            }
+          } catch {
+            // fallback
+          }
+        } else {
+          const lower = item.productId.toLowerCase();
+          if (
+            lower.includes('coca') ||
+            lower.includes('bebida') ||
+            lower.includes('agua') ||
+            lower.includes('vino') ||
+            lower.includes('cerveza') ||
+            lower.includes('drink') ||
+            lower.includes('sprite') ||
+            lower.includes('fanta')
+          ) {
+            sector = 'BEBIDAS';
+          } else if (lower.includes('helado') || lower.includes('postre') || lower.includes('icecream') || lower.includes('flan')) {
+            sector = 'HELADOS';
+          } else if (lower.includes('cafe') || lower.includes('café') || lower.includes('cortado') || lower.includes('te')) {
+            sector = 'CAFE';
+          }
+        }
+
+        if (!sectorMap[sector]) {
+          sectorMap[sector] = [];
+        }
+        sectorMap[sector].push({
+          productId: item.productId,
+          name: itemName,
+          quantity: item.quantity,
+          notes: item.notes,
+        });
+      }
+
+      const primarySector = Object.keys(sectorMap)[0] || 'PIZZAS';
+      const primaryTicketCode = `T-${tableLabel}-01-${primarySector}`;
+
+      const tickets = Object.entries(sectorMap).map(([sec, secItems]) => ({
+        id: randomUUID(),
+        sector: sec,
+        ticketCode: `T-${tableLabel}-01-${sec}`,
+        items: secItems,
+        status: 'RECEIVED',
+      }));
+
+      const notesPayload = JSON.stringify({
+        sector: primarySector,
+        ticketCode: primaryTicketCode,
+        tickets,
+        items: finalOrder.items,
+        userNotes: input.notes ?? null,
+      });
+
+      if (repos.kitchenOrderRepo) {
+        const existingKO = await repos.kitchenOrderRepo.findByOrderId(finalOrder.id);
+        if (existingKO) {
+          kitchenOrder = existingKO;
+          isRetry = true;
+        } else {
+          const created = KitchenOrder.create({
+            id: randomUUID(),
+            restaurantId: finalOrder.restaurantId,
+            orderId: finalOrder.id,
+            sector: primarySector,
+            ticketCode: primaryTicketCode,
+            items: finalOrder.items.map((it) => ({
+              productId: it.productId,
+              quantity: it.quantity,
+              notes: it.notes,
+            })),
+            notes: notesPayload,
+            priority: input.priority ?? 0,
+          });
+          if (!created.success) return err(created.error);
+          kitchenOrder = created.value;
+          await repos.kitchenOrderRepo.save(kitchenOrder);
         }
       }
 

@@ -25,6 +25,7 @@ import {
   type KitchenOrderRepository,
   type TableSessionRepository,
   type TableRepository,
+  type ProductRepository,
   type EventPublisher,
   type TransactionRunner,
 } from '@restaurant-os/application';
@@ -44,6 +45,7 @@ export interface BillingRoutesOptions {
   sessionRepo?: TableSessionRepository;
   tableRepo?: TableRepository;
   txRunner?: TransactionRunner;
+  productRepo?: ProductRepository;
 }
 
 export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOptions) {
@@ -62,6 +64,7 @@ export async function billingRoutes(app: FastifyInstance, opts: BillingRoutesOpt
     opts.sessionRepo,
     opts.tableRepo,
     opts.txRunner,
+    opts.productRepo,
   );
   const closeUseCase = new CloseAccountUseCase(
     opts.accountRepo,

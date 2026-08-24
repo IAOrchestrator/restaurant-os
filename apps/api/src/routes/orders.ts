@@ -23,6 +23,7 @@ import {
   type KitchenOrderRepository,
   type TableSessionRepository,
   type TableRepository,
+  type ProductRepository,
   type EventPublisher,
   type TransactionRunner,
 } from '@restaurant-os/application';
@@ -35,6 +36,7 @@ export interface OrderRoutesOptions {
   sessionRepo?: TableSessionRepository;
   tableRepo?: TableRepository;
   txRunner?: TransactionRunner;
+  productRepo?: ProductRepository;
 }
 
 export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions) {
@@ -50,6 +52,7 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
     opts.sessionRepo,
     opts.tableRepo,
     opts.txRunner,
+    opts.productRepo,
   );
   const startPreparingUseCase = new StartPreparingUseCase(opts.orderRepo, opts.eventPublisher);
   const markReadyUseCase = new MarkOrderReadyUseCase(opts.orderRepo, opts.eventPublisher);

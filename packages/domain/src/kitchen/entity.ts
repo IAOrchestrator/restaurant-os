@@ -11,6 +11,13 @@ export enum KitchenOrderStatus {
   COMPLETED = 'COMPLETED',
 }
 
+export interface KitchenItem {
+  productId: string;
+  name?: string;
+  quantity: number;
+  notes?: string;
+}
+
 export class KitchenOrder extends Entity<KitchenOrderId> {
   private constructor(
     id: KitchenOrderId,
@@ -19,14 +26,17 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
     private _status: KitchenOrderStatus,
     private _assignedTo: string | null,
     private _priority: number,
-    public readonly receivedAt: Date,
-    private _startedAt: Date | null,
-    private _nearlyReadyAt: Date | null,
-    private _readyAt: Date | null,
-    private _completedAt: Date | null,
-    private _notes: string | null,
-    public readonly createdAt: Date,
-    public readonly updatedAt: Date,
+    public readonly sector: string = 'PIZZAS',
+    public readonly ticketCode: string | null = null,
+    public readonly items: KitchenItem[] = [],
+    public readonly receivedAt: Date = new Date(),
+    private _startedAt: Date | null = null,
+    private _nearlyReadyAt: Date | null = null,
+    private _readyAt: Date | null = null,
+    private _completedAt: Date | null = null,
+    private _notes: string | null = null,
+    public readonly createdAt: Date = new Date(),
+    public readonly updatedAt: Date = new Date(),
   ) {
     super(id);
   }
@@ -37,6 +47,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
     orderId: string;
     assignedTo?: string | null;
     priority?: number;
+    sector?: string;
+    ticketCode?: string | null;
+    items?: KitchenItem[];
     notes?: string | null;
     createdAt?: Date;
   }): Result<KitchenOrder, KitchenDomainError> {
@@ -49,6 +62,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         KitchenOrderStatus.RECEIVED,
         props.assignedTo ?? null,
         props.priority ?? 0,
+        props.sector ?? 'PIZZAS',
+        props.ticketCode ?? null,
+        props.items ?? [],
         now,
         null,
         null,
@@ -105,6 +121,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         this._status,
         staffId,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         this._nearlyReadyAt,
@@ -133,6 +152,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         KitchenOrderStatus.STARTED,
         this._assignedTo,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         new Date(),
         this._nearlyReadyAt,
@@ -161,6 +183,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         KitchenOrderStatus.NEARLY_READY,
         this._assignedTo,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         new Date(),
@@ -189,6 +214,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         KitchenOrderStatus.READY,
         this._assignedTo,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         this._nearlyReadyAt,
@@ -217,6 +245,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         KitchenOrderStatus.COMPLETED,
         this._assignedTo,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         this._nearlyReadyAt,
@@ -244,6 +275,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         this._status,
         this._assignedTo,
         priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         this._nearlyReadyAt,
@@ -268,6 +302,9 @@ export class KitchenOrder extends Entity<KitchenOrderId> {
         this._status,
         this._assignedTo,
         this._priority,
+        this.sector,
+        this.ticketCode,
+        this.items,
         this.receivedAt,
         this._startedAt,
         this._nearlyReadyAt,

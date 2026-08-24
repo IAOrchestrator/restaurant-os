@@ -34,6 +34,28 @@ export interface KitchenRoutesOptions {
   txRunner?: TransactionRunner;
 }
 
+function serializeKitchenOrder(ko: any) {
+  return KitchenOrderResponseSchema.parse({
+    id: ko.id,
+    restaurantId: ko.restaurantId,
+    orderId: ko.orderId,
+    status: ko.status,
+    assignedTo: ko.assignedTo,
+    priority: ko.priority,
+    sector: ko.sector || 'PIZZAS',
+    ticketCode: ko.ticketCode || null,
+    items: ko.items || [],
+    receivedAt: ko.receivedAt.toISOString(),
+    startedAt: ko.startedAt?.toISOString() ?? null,
+    nearlyReadyAt: ko.nearlyReadyAt?.toISOString() ?? null,
+    readyAt: ko.readyAt?.toISOString() ?? null,
+    completedAt: ko.completedAt?.toISOString() ?? null,
+    notes: ko.notes,
+    createdAt: ko.createdAt.toISOString(),
+    updatedAt: ko.updatedAt.toISOString(),
+  });
+}
+
 export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOptions) {
   const createUseCase = new CreateKitchenOrderUseCase(opts.kitchenOrderRepo, opts.eventPublisher);
   const startUseCase = new StartKitchenOrderUseCase(
@@ -84,24 +106,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
         return reply.status(400).send({ error: result.error.message });
       }
 
-      return reply.status(201).send(
-        KitchenOrderResponseSchema.parse({
-          id: result.value.id,
-          restaurantId: result.value.restaurantId,
-          orderId: result.value.orderId,
-          status: result.value.status,
-          assignedTo: result.value.assignedTo,
-          priority: result.value.priority,
-          receivedAt: result.value.receivedAt.toISOString(),
-          startedAt: result.value.startedAt?.toISOString() ?? null,
-          nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-          readyAt: result.value.readyAt?.toISOString() ?? null,
-          completedAt: result.value.completedAt?.toISOString() ?? null,
-          notes: result.value.notes,
-          createdAt: result.value.createdAt.toISOString(),
-          updatedAt: result.value.updatedAt.toISOString(),
-        }),
-      );
+      return reply.status(201).send(serializeKitchenOrder(result.value));
     },
   );
 
@@ -121,24 +126,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
       }
 
       const orders = await opts.kitchenOrderRepo.findByRestaurantId(restaurantId, status);
-      return orders.map((o) =>
-        KitchenOrderResponseSchema.parse({
-          id: o.id,
-          restaurantId: o.restaurantId,
-          orderId: o.orderId,
-          status: o.status,
-          assignedTo: o.assignedTo,
-          priority: o.priority,
-          receivedAt: o.receivedAt.toISOString(),
-          startedAt: o.startedAt?.toISOString() ?? null,
-          nearlyReadyAt: o.nearlyReadyAt?.toISOString() ?? null,
-          readyAt: o.readyAt?.toISOString() ?? null,
-          completedAt: o.completedAt?.toISOString() ?? null,
-          notes: o.notes,
-          createdAt: o.createdAt.toISOString(),
-          updatedAt: o.updatedAt.toISOString(),
-        }),
-      );
+      return orders.map(serializeKitchenOrder);
     },
   );
 
@@ -158,22 +146,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
         return reply.status(404).send({ error: 'Kitchen order not found' });
       }
 
-      return KitchenOrderResponseSchema.parse({
-        id: order.id,
-        restaurantId: order.restaurantId,
-        orderId: order.orderId,
-        status: order.status,
-        assignedTo: order.assignedTo,
-        priority: order.priority,
-        receivedAt: order.receivedAt.toISOString(),
-        startedAt: order.startedAt?.toISOString() ?? null,
-        nearlyReadyAt: order.nearlyReadyAt?.toISOString() ?? null,
-        readyAt: order.readyAt?.toISOString() ?? null,
-        completedAt: order.completedAt?.toISOString() ?? null,
-        notes: order.notes,
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-      });
+      return serializeKitchenOrder(order);
     },
   );
 
@@ -188,22 +161,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
-    return KitchenOrderResponseSchema.parse({
-      id: result.value.id,
-      restaurantId: result.value.restaurantId,
-      orderId: result.value.orderId,
-      status: result.value.status,
-      assignedTo: result.value.assignedTo,
-      priority: result.value.priority,
-      receivedAt: result.value.receivedAt.toISOString(),
-      startedAt: result.value.startedAt?.toISOString() ?? null,
-      nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-      readyAt: result.value.readyAt?.toISOString() ?? null,
-      completedAt: result.value.completedAt?.toISOString() ?? null,
-      notes: result.value.notes,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-    });
+    return serializeKitchenOrder(result.value);
   };
   app.post('/orders/:id/start', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_START), requireResourceAccess('kitchen-order')] }, startHandler);
   app.patch('/orders/:id/start', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_START), requireResourceAccess('kitchen-order')] }, startHandler);
@@ -215,22 +173,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
-    return KitchenOrderResponseSchema.parse({
-      id: result.value.id,
-      restaurantId: result.value.restaurantId,
-      orderId: result.value.orderId,
-      status: result.value.status,
-      assignedTo: result.value.assignedTo,
-      priority: result.value.priority,
-      receivedAt: result.value.receivedAt.toISOString(),
-      startedAt: result.value.startedAt?.toISOString() ?? null,
-      nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-      readyAt: result.value.readyAt?.toISOString() ?? null,
-      completedAt: result.value.completedAt?.toISOString() ?? null,
-      notes: result.value.notes,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-    });
+    return serializeKitchenOrder(result.value);
   };
   app.post('/orders/:id/nearly-ready', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_READY), requireResourceAccess('kitchen-order')] }, nearlyHandler);
   app.patch('/orders/:id/nearly-ready', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_READY), requireResourceAccess('kitchen-order')] }, nearlyHandler);
@@ -246,22 +189,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
-    return KitchenOrderResponseSchema.parse({
-      id: result.value.id,
-      restaurantId: result.value.restaurantId,
-      orderId: result.value.orderId,
-      status: result.value.status,
-      assignedTo: result.value.assignedTo,
-      priority: result.value.priority,
-      receivedAt: result.value.receivedAt.toISOString(),
-      startedAt: result.value.startedAt?.toISOString() ?? null,
-      nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-      readyAt: result.value.readyAt?.toISOString() ?? null,
-      completedAt: result.value.completedAt?.toISOString() ?? null,
-      notes: result.value.notes,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-    });
+    return serializeKitchenOrder(result.value);
   };
   app.post('/orders/:id/ready', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_READY), requireResourceAccess('kitchen-order')] }, readyHandler);
   app.patch('/orders/:id/ready', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_READY), requireResourceAccess('kitchen-order')] }, readyHandler);
@@ -273,22 +201,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
-    return KitchenOrderResponseSchema.parse({
-      id: result.value.id,
-      restaurantId: result.value.restaurantId,
-      orderId: result.value.orderId,
-      status: result.value.status,
-      assignedTo: result.value.assignedTo,
-      priority: result.value.priority,
-      receivedAt: result.value.receivedAt.toISOString(),
-      startedAt: result.value.startedAt?.toISOString() ?? null,
-      nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-      readyAt: result.value.readyAt?.toISOString() ?? null,
-      completedAt: result.value.completedAt?.toISOString() ?? null,
-      notes: result.value.notes,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-    });
+    return serializeKitchenOrder(result.value);
   };
   app.post('/orders/:id/complete', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_COMPLETE), requireResourceAccess('kitchen-order')] }, completeHandler);
   app.patch('/orders/:id/complete', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_COMPLETE), requireResourceAccess('kitchen-order')] }, completeHandler);
@@ -305,22 +218,7 @@ export async function kitchenRoutes(app: FastifyInstance, opts: KitchenRoutesOpt
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }
-    return KitchenOrderResponseSchema.parse({
-      id: result.value.id,
-      restaurantId: result.value.restaurantId,
-      orderId: result.value.orderId,
-      status: result.value.status,
-      assignedTo: result.value.assignedTo,
-      priority: result.value.priority,
-      receivedAt: result.value.receivedAt.toISOString(),
-      startedAt: result.value.startedAt?.toISOString() ?? null,
-      nearlyReadyAt: result.value.nearlyReadyAt?.toISOString() ?? null,
-      readyAt: result.value.readyAt?.toISOString() ?? null,
-      completedAt: result.value.completedAt?.toISOString() ?? null,
-      notes: result.value.notes,
-      createdAt: result.value.createdAt.toISOString(),
-      updatedAt: result.value.updatedAt.toISOString(),
-    });
+    return serializeKitchenOrder(result.value);
   };
   app.post('/orders/:id/assign', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_ASSIGN), requireResourceAccess('kitchen-order')] }, assignHandler);
   app.patch('/orders/:id/assign', { preHandler: [requirePermission(Permission.KITCHEN_ORDERS_ASSIGN), requireResourceAccess('kitchen-order')] }, assignHandler);

@@ -13,8 +13,9 @@ export class Product extends Entity<ProductId> {
     private _price: number,
     public readonly imageUrl: string | null,
     private _isAvailable: boolean,
-    public readonly createdAt: Date,
-    public readonly updatedAt: Date,
+    public readonly sectorKDS: string = 'PIZZAS',
+    public readonly createdAt: Date = new Date(),
+    public readonly updatedAt: Date = new Date(),
   ) {
     super(id);
   }
@@ -28,6 +29,7 @@ export class Product extends Entity<ProductId> {
     price: number;
     imageUrl?: string | null;
     isAvailable?: boolean;
+    sectorKDS?: string;
     createdAt?: Date;
   }): Result<Product, ProductDomainError> {
     if (!props.name || props.name.trim().length === 0) {
@@ -51,6 +53,7 @@ export class Product extends Entity<ProductId> {
         props.price,
         props.imageUrl ?? null,
         props.isAvailable ?? true,
+        props.sectorKDS ?? 'PIZZAS',
         now,
         now,
       ),
@@ -71,6 +74,7 @@ export class Product extends Entity<ProductId> {
     price?: number;
     imageUrl?: string | null;
     categoryId?: string;
+    sectorKDS?: string;
   }): Result<Product, ProductDomainError> {
     if (props.name !== undefined) {
       if (props.name.trim().length === 0) {
@@ -94,6 +98,7 @@ export class Product extends Entity<ProductId> {
         props.price !== undefined ? props.price : this._price,
         props.imageUrl !== undefined ? props.imageUrl : this.imageUrl,
         this._isAvailable,
+        props.sectorKDS !== undefined ? props.sectorKDS : this.sectorKDS,
         this.createdAt,
         new Date(),
       ),
@@ -110,6 +115,7 @@ export class Product extends Entity<ProductId> {
       this._price,
       this.imageUrl,
       available,
+      this.sectorKDS,
       this.createdAt,
       new Date(),
     );
@@ -129,6 +135,7 @@ export class Product extends Entity<ProductId> {
         newPrice,
         this.imageUrl,
         this._isAvailable,
+        this.sectorKDS,
         this.createdAt,
         new Date(),
       ),

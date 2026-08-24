@@ -402,6 +402,7 @@ export const CreateProductSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   price: z.number().nonnegative(),
   imageUrl: z.string().url().nullable().optional(),
+  sectorKDS: z.string().optional().default('PIZZAS'),
 });
 
 export type CreateProductInput = z.infer<typeof CreateProductSchema>;
@@ -412,6 +413,7 @@ export const UpdateProductSchema = z.object({
   price: z.number().nonnegative().optional(),
   imageUrl: z.string().url().nullable().optional(),
   categoryId: z.string().min(1).optional(),
+  sectorKDS: z.string().optional(),
 });
 
 export type UpdateProductInput = z.infer<typeof UpdateProductSchema>;
@@ -431,6 +433,7 @@ export const ProductResponseSchema = z.object({
   price: z.number().nonnegative(),
   imageUrl: z.string().nullable(),
   isAvailable: z.boolean(),
+  sectorKDS: z.string().optional().default('PIZZAS'),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -549,6 +552,15 @@ export const CreateKitchenOrderSchema = z.object({
 
 export type CreateKitchenOrderInput = z.infer<typeof CreateKitchenOrderSchema>;
 
+export const KitchenItemSchema = z.object({
+  productId: z.string(),
+  name: z.string().optional(),
+  quantity: z.number().int().min(1),
+  notes: z.string().optional(),
+});
+
+export type KitchenItem = z.infer<typeof KitchenItemSchema>;
+
 export const KitchenOrderResponseSchema = z.object({
   id: UuidSchema,
   restaurantId: UuidSchema,
@@ -556,6 +568,9 @@ export const KitchenOrderResponseSchema = z.object({
   status: KitchenOrderStatusSchema,
   assignedTo: UuidSchema.nullable(),
   priority: z.number().int(),
+  sector: z.string().optional().default('PIZZAS'),
+  ticketCode: z.string().nullable().optional(),
+  items: z.array(KitchenItemSchema).optional().default([]),
   receivedAt: z.string().datetime(),
   startedAt: z.string().datetime().nullable(),
   nearlyReadyAt: z.string().datetime().nullable(),

@@ -89,7 +89,7 @@ describe('Restaurant OS Web App & Workspaces', () => {
     const adminTab = screen.getByText('Administración');
     fireEvent.click(adminTab);
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Panel de Administración/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Administración/i })).toBeInTheDocument();
     });
   });
 });

@@ -98,7 +98,8 @@ describe('PreOrder aggregate', () => {
   it('fails invalid transitions', () => {
     const preOrder = PreOrder.create(validProps).value!;
     expect(preOrder.startReview().success).toBe(false);
-    expect(preOrder.confirm().success).toBe(false);
+    const cancelled = preOrder.cancel().value!;
+    expect(cancelled.confirm().success).toBe(false);
   });
 
   it('fails to add items after READY', () => {

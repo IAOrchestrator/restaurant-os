@@ -122,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, Permission[]> = {
 
 // Customer permissions (independent of staff roles)
 export const CUSTOMER_PERMISSIONS: Permission[] = [
+  Permission.CATALOG_READ,
   Permission.PREORDERS_READ,
   Permission.PREORDERS_CREATE,
   Permission.PREORDERS_UPDATE,

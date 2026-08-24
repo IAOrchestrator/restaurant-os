@@ -27,7 +27,7 @@ export const inventoryRoutes: FastifyPluginAsync = async (fastify) => {
     '/raw-materials',
     {
       preHandler: [
-        requirePermission(Permission.CATALOG_READ),
+        requirePermission(Permission.CATALOG_MANAGE),
         validateRestaurantAccess(),
       ],
     },
@@ -111,7 +111,7 @@ export const inventoryRoutes: FastifyPluginAsync = async (fastify) => {
     '/recipes/:productId',
     {
       preHandler: [
-        requirePermission(Permission.CATALOG_READ),
+        requirePermission(Permission.CATALOG_MANAGE),
       ],
     },
     async (request, reply) => {

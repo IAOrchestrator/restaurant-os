@@ -6,12 +6,23 @@ import {
 } from './registry';
 
 describe('Workspaces Registry & Access Control', () => {
-  it('registers all 8 operational workspaces', () => {
+  it('registers all 10 operational workspaces', () => {
     const registeredKeys = Object.keys(WORKSPACES_REGISTRY);
     expect(registeredKeys).toEqual(
-      expect.arrayContaining(['dashboard', 'reception', 'waiter', 'kitchen', 'table', 'customer', 'cashier', 'admin']),
+      expect.arrayContaining([
+        'dashboard',
+        'reception',
+        'waiter',
+        'kitchen',
+        'tv-pickup',
+        'delivery',
+        'table',
+        'customer',
+        'cashier',
+        'admin',
+      ]),
     );
-    expect(registeredKeys).toHaveLength(8);
+    expect(registeredKeys).toHaveLength(10);
   });
 
   it('allows CUSTOMER only on customer workspace', () => {

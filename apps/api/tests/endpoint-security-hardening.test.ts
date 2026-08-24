@@ -147,7 +147,7 @@ describe('Step 3.3 — Comprehensive Endpoint Hardening & IDOR Protection', () =
       expect(res.statusCode).toBe(403);
     });
 
-    it('1.2. Denies access to inventory when actor lacks CATALOG_READ permission (e.g. Kitchen role)', async () => {
+    it('1.2. Denies access to inventory when actor lacks CATALOG_MANAGE permission (e.g. Kitchen role)', async () => {
       const kitchenToken = jwtService.sign({
         sub: KITCHEN_1,
         type: 'STAFF',
@@ -209,7 +209,7 @@ describe('Step 3.3 — Comprehensive Endpoint Hardening & IDOR Protection', () =
       expect(res.statusCode).toBe(403);
     });
 
-    it('1.5. Allows Admin with CATALOG_READ to list raw materials for own restaurant', async () => {
+    it('1.5. Allows Admin with CATALOG_MANAGE to list raw materials for own restaurant', async () => {
       vi.spyOn(GetRawMaterialsUseCase.prototype, 'execute').mockResolvedValueOnce([
         { id: 'mat-1', restaurantId: RESTAURANT_1, name: 'Harina', unit: 'KG', currentStock: 50, minStockAlert: 10, unitCost: 1.5, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
       ]);

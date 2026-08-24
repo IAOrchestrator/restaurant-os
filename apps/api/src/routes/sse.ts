@@ -55,11 +55,15 @@ export async function sseRoutes(app: FastifyInstance, opts: SseRoutesOptions) {
       }
     }
 
+    const reqOrigin = (request.headers.origin as string) || '*';
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': reqOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
     });
 
     const connId = randomUUID();

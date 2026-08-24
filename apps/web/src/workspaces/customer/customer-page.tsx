@@ -19,6 +19,7 @@ import {
   Clock,
   ArrowRight,
 } from 'lucide-react';
+import { QrCodeVisual } from '../../components/shared/QrCodeVisual';
 
 export interface CatalogProduct {
   id: string;
@@ -212,18 +213,35 @@ export function CustomerPage() {
       {/* Active Live QR Card (If Generated) */}
       {activePreOrder && (
         <section className="rounded-xl bg-gradient-to-br from-amber/20 to-surface-2 border-2 border-amber p-5 mb-6 shadow-glowAmber text-center relative overflow-hidden animate-slide-in">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-3">
             <span className="px-2.5 py-0.5 rounded-pill bg-amber text-black text-[10px] font-black uppercase tracking-wider">
               {activePreOrder.type === 'SALON' ? '🍽️ Salón' : (activePreOrder.type === 'TAKEAWAY' ? '🛍️ Retiro' : '🛵 Delivery')}
             </span>
-            <span className="text-xs font-mono text-emerald font-bold">QR VIVO ÚNICO</span>
+            <span className="text-xs font-mono text-emerald font-bold flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald animate-ping" />
+              <span>QR VIVO ÚNICO</span>
+            </span>
           </div>
 
-          <div className="text-4xl font-black font-mono tracking-wider text-white my-3">
+          {/* Crisp Giant SVG QR Code */}
+          <div className="my-3 flex justify-center">
+            <QrCodeVisual
+              value={JSON.stringify({
+                code: activePreOrder.code,
+                type: activePreOrder.type,
+                restaurantId,
+                total: activePreOrder.totalAmount,
+              })}
+              size={180}
+              subLabel={`CÓDIGO: ${activePreOrder.code}`}
+            />
+          </div>
+
+          <div className="text-3xl font-black font-mono tracking-wider text-white mb-2">
             {activePreOrder.code}
           </div>
 
-          <p className="text-xs text-text-secondary mb-3">
+          <p className="text-xs text-text-secondary mb-3 px-2">
             {activePreOrder.type === 'SALON'
               ? 'Muestra este código al Mozo o Recepción al sentarte en tu mesa.'
               : (activePreOrder.type === 'TAKEAWAY'
@@ -234,6 +252,22 @@ export function CustomerPage() {
           <div className="flex justify-between items-center bg-black/40 rounded-lg p-2.5 text-xs font-mono">
             <span>{activePreOrder.itemsCount} productos</span>
             <span className="font-bold text-amber">${activePreOrder.totalAmount.toLocaleString()}</span>
+          </div>
+
+          {/* Placeholder for Gmail Login */}
+          <div className="mt-3 pt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() =>
+                setMsg({
+                  type: 'success',
+                  text: 'ℹ️ Vinculación con Gmail OAuth se habilitará en Fase 3. ¡Tu sesión actual ya funciona sin fricción!',
+                })
+              }
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-white bg-surface-2 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-pill transition cursor-pointer"
+            >
+              <span>✉️ Guardar con Gmail (Próximamente Fase 3)</span>
+            </button>
           </div>
         </section>
       )}

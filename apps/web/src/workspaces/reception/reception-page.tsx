@@ -13,7 +13,10 @@ import {
   MapPin,
   ChevronRight,
   LogOut,
+  Camera,
+  Scan,
 } from 'lucide-react';
+import { QrScannerModal, type QrPayload } from '../../components/shared/QrScannerModal';
 
 export interface TableItem {
   id: string;
@@ -63,6 +66,8 @@ export function ReceptionPage() {
   const [partySize, setPartySize] = useState(2);
   const [phone, setPhone] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -215,6 +220,42 @@ export function ReceptionPage() {
     }
   };
 
+  // Scan QR code at reception door
+  const handleScanQrSuccess = async (payload: QrPayload) => {
+    setErrorMsg(null);
+    setSuccessBanner(null);
+
+    if (payload.channel === 'TAKEAWAY') {
+      setSuccessBanner(`🛍️ QR ${payload.code} (TakeAway) detectado. Dirigir a Caja para abono.`);
+      return;
+    }
+
+    // Find first available table for #P-12
+    const availTable = tables.find((t) => t.status === 'AVAILABLE' && !sessionByTableId[t.id]);
+    if (!availTable) {
+      setErrorMsg(`Salón completo. No hay mesas libres para sentar al cliente con ${payload.code}.`);
+      return;
+    }
+
+    const sessionRes = await request<{ id: string }>('/api/table-sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        restaurantId,
+        tableId: availTable.id,
+        initialWaiterId: selectedWaiterId,
+      }),
+    });
+
+    if (sessionRes.data) {
+      setSuccessBanner(
+        `✨ QR ${payload.code} escaneado con éxito. Cliente sentado en Mesa #${availTable.number}. QR vivo consumido.`,
+      );
+      fetchData();
+    } else {
+      setErrorMsg(sessionRes.error || 'Error al ocupar mesa para QR escaneado');
+    }
+  };
+
   const waitingList = waitlist.filter((w) => w.status === 'WAITING' || w.status === 'CALLED');
 
   return (
@@ -238,8 +279,17 @@ export function ReceptionPage() {
 
         {/* Waiter Assign Selector & Actions */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="h-9 px-3 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95 cursor-pointer"
+            title="Escanear QR de cliente con cámara"
+          >
+            <Camera className="w-4 h-4" />
+            <span className="hidden sm:inline">Escanear QR</span>
+          </button>
+
           <div className="flex items-center gap-2 bg-surface-2 border border-white/5 rounded-pill px-3 py-1.5 text-xs">
-            <span className="text-text-tertiary font-medium">Mozo asignado:</span>
+            <span className="text-text-tertiary font-medium">Mozo:</span>
             <select
               value={selectedWaiterId}
               onChange={(e) => setSelectedWaiterId(e.target.value)}
@@ -264,6 +314,31 @@ export function ReceptionPage() {
           </button>
         </div>
       </header>
+
+      {/* Success banner from scan */}
+      {successBanner && (
+        <div className="mb-6 p-4 rounded-md bg-emerald/15 border border-emerald/30 text-emerald flex items-center justify-between gap-3 animate-slide-in shadow-card">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <span className="text-sm font-medium">{successBanner}</span>
+          </div>
+          <button
+            onClick={() => setSuccessBanner(null)}
+            className="text-xs text-emerald underline hover:text-white"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {/* Qr Scanner Modal */}
+      <QrScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onScanSuccess={handleScanQrSuccess}
+        title="Escanear QR de Cliente (Puerta)"
+        subtitle="Apunta al código #P-12 del cliente para sentarlo y ocupar mesa"
+      />
 
       {errorMsg && (
         <div className="mb-6 p-4 rounded-md bg-crimson/15 border border-crimson/30 text-crimson flex items-center gap-3 animate-slide-in">

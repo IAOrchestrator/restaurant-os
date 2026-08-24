@@ -15,7 +15,10 @@ import {
   DollarSign,
   Calculator,
   Percent,
+  Camera,
+  Scan,
 } from 'lucide-react';
+import { QrScannerModal, type QrPayload } from '../../components/shared/QrScannerModal';
 
 export interface BillingAccount {
   id: string;
@@ -43,6 +46,7 @@ export function CashierPage() {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'QR'>('CASH');
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showScannerModal, setShowScannerModal] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -260,6 +264,14 @@ export function CashierPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="h-9 px-3 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95 cursor-pointer"
+            title="Escanear QR de cliente para cobro"
+          >
+            <Camera className="w-4 h-4" />
+            <span className="hidden sm:inline">Escanear QR</span>
+          </button>
           <span className="text-xs font-mono font-extrabold px-3 py-1 rounded-pill bg-emerald/15 text-emerald border border-emerald/30 shadow-sm">
             MESAS LIBRES: {tables.filter((t) => !sessions.some((s) => s.tableId === t.id) && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
           </span>
@@ -277,6 +289,28 @@ export function CashierPage() {
           </button>
         </div>
       </header>
+
+      {/* QR Scanner Modal */}
+      <QrScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onScanSuccess={(payload) => {
+          setMsg(null);
+          if (payload.channel === 'TAKEAWAY') {
+            setMsg({
+              type: 'success',
+              text: `🛍️ QR ${payload.code} (TakeAway) escaneado. Listo para registrar cobro y despachar a Cocina/Barra.`,
+            });
+          } else {
+            setMsg({
+              type: 'success',
+              text: `✨ QR ${payload.code} escaneado con éxito.`,
+            });
+          }
+        }}
+        title="Escanear QR de Cliente (Caja)"
+        subtitle="Apunta al código QR #L-45 o #P-12 para cobrar y despachar"
+      />
 
       {/* Messages */}
       {msg && (

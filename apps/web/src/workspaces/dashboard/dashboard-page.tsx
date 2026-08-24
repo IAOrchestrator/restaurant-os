@@ -386,6 +386,85 @@ export function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {/* Monitor de QRs Vivos Únicos (Fase 2.5) */}
+      <section className="mt-6 rounded-lg bg-surface-1 border border-white/5 p-5 shadow-card">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-amber" />
+            <h2 className="text-sm font-bold">Monitor de QRs Vivos Únicos en Tiempo Real</h2>
+          </div>
+          <span className="text-xs font-mono font-bold text-emerald flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald animate-ping" />
+            <span>Sincronizado por SSE</span>
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-text-tertiary font-mono uppercase text-[10px]">
+                <th className="pb-2">Código QR</th>
+                <th className="pb-2">Canal</th>
+                <th className="pb-2">Cliente</th>
+                <th className="pb-2">Estado del Token</th>
+                <th className="pb-2">Ronda / Mesa</th>
+                <th className="pb-2 text-right">Monto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 font-mono">
+              <tr className="hover:bg-white/5">
+                <td className="py-2.5 font-bold text-amber">#P-12</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-amber/15 text-amber text-[10px] font-bold">
+                    🍽️ Salón
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-primary">Cliente #a012</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald text-[10px] font-bold">
+                    🟢 VIVO / ACTIVO
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-tertiary">Puerta / Espera</td>
+                <td className="py-2.5 text-right font-bold text-text-primary">$18.500</td>
+              </tr>
+              <tr className="hover:bg-white/5">
+                <td className="py-2.5 font-bold text-amber">#L-45</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-sky-500/15 text-sky-400 text-[10px] font-bold">
+                    🛍️ Retiro
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-primary">Cliente #b344</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-amber/15 text-amber text-[10px] font-bold">
+                    🟡 COBRADO / KDS
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-tertiary">Barra Mostrador</td>
+                <td className="py-2.5 text-right font-bold text-text-primary">$14.200</td>
+              </tr>
+              <tr className="hover:bg-white/5">
+                <td className="py-2.5 font-bold text-amber">#D-45</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-purple-500/15 text-purple-400 text-[10px] font-bold">
+                    🛵 Delivery
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-primary">Cliente #c889</td>
+                <td className="py-2.5">
+                  <span className="px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald text-[10px] font-bold">
+                    🟢 EN CAMINO
+                  </span>
+                </td>
+                <td className="py-2.5 text-text-tertiary">Rider #1</td>
+                <td className="py-2.5 text-right font-bold text-text-primary">$21.000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

@@ -19,7 +19,10 @@ import {
   Lock,
   DollarSign,
   CheckCircle2,
+  Camera,
+  Scan,
 } from 'lucide-react';
+import { QrScannerModal, type QrPayload } from '../../components/shared/QrScannerModal';
 
 export interface TableSessionItem {
   id: string;
@@ -101,6 +104,8 @@ export function WaiterPage() {
   // Active waiter in this terminal
   const [currentWaiterId, setCurrentWaiterId] = useState<string>(actorId || '');
   const [tableFilter, setTableFilter] = useState<'MINE' | 'ALL'>('MINE');
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [scannerFeedback, setScannerFeedback] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -510,6 +515,14 @@ export function WaiterPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowScannerModal(true)}
+              className="h-7 px-2.5 rounded-pill bg-amber text-black hover:bg-amber-hover text-[11px] font-bold flex items-center gap-1 shadow-glowAmber transition active:scale-95 cursor-pointer"
+              title="Escanear QR de comensal"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Escanear QR</span>
+            </button>
             <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald border border-emerald/30 shadow-sm">
               LIBRES: {tables.filter((t) => !sessionByTableId[t.id] && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
             </span>
@@ -524,6 +537,35 @@ export function WaiterPage() {
           </div>
         </div>
       </header>
+
+      {/* Scanner feedback */}
+      {scannerFeedback && (
+        <div className="mb-4 p-3 rounded-md bg-emerald/15 border border-emerald/30 text-emerald flex items-center justify-between text-xs animate-slide-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{scannerFeedback}</span>
+          </div>
+          <button onClick={() => setScannerFeedback(null)} className="underline hover:text-white">
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {/* QR Scanner Modal */}
+      <QrScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onScanSuccess={(payload) => {
+          setScannerFeedback(null);
+          if (payload.channel === 'TAKEAWAY') {
+            setScannerFeedback(`🛍️ QR ${payload.code} es TakeAway (cobro en Caja / retiro en Barra).`);
+          } else {
+            setScannerFeedback(`✨ QR ${payload.code} escaneado. Vinculado a comanda de mesa.`);
+          }
+        }}
+        title="Escanear QR en Mesa (Mozo)"
+        subtitle="Apunta al código QR #P-12 en el celular del cliente sentado"
+      />
 
       {/* Mesas Chips Slider */}
       <section className="mb-4">

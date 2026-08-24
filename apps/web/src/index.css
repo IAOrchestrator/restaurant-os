@@ -41,11 +41,15 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
     box-sizing: border-box;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased min-h-screen selection:bg-amber/30 selection:text-white;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
     background: radial-gradient(1200px 600px at 20% -10%, hsla(var(--amber) / 0.08), transparent),
                 radial-gradient(800px 400px at 90% 20%, hsla(var(--emerald) / 0.06), transparent),
                 hsl(var(--background));

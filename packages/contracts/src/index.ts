@@ -251,7 +251,7 @@ export type WaitlistEntryResponse = z.infer<typeof WaitlistEntryResponseSchema>;
 
 // --- PreOrder Contracts ---
 export const PreOrderItemSchema = z.object({
-  productId: z.string().uuid(),
+  productId: z.string().min(1),
   quantity: z.number().int().positive(),
   notes: z.string().optional(),
 });
@@ -279,7 +279,7 @@ export type PreOrderResponse = z.infer<typeof PreOrderResponseSchema>;
 
 // --- Order Contracts ---
 export const OrderItemSchema = z.object({
-  productId: z.string().uuid(),
+  productId: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.number().nonnegative(),
   notes: z.string().optional(),

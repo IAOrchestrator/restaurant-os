@@ -174,7 +174,7 @@ async function bootstrap() {
   await app.register(versionRoutes, { prefix: '/version' });
   await app.register(authRoutes, { prefix: '/api/auth', jwtService, credentialHasher });
   await app.register(tableRoutes, { prefix: '/api/tables', tableRepo, sessionRepo, eventPublisher });
-  await app.register(tableSessionRoutes, { prefix: '/api/table-sessions', tableRepo, sessionRepo, eventPublisher, txRunner });
+  await app.register(tableSessionRoutes, { prefix: '/api/table-sessions', tableRepo, sessionRepo, orderRepo, eventPublisher, txRunner });
   await app.register(tableDeviceRoutes, { prefix: '/api/table-devices', deviceRepo: tableDeviceRepo, tableRepo, sessionRepo, eventPublisher });
   await app.register(waitlistRoutes, { prefix: '/api/waitlist', waitlistRepo, eventPublisher });
   await app.register(preOrderRoutes, { prefix: '/api/preorders', preOrderRepo, eventPublisher });

@@ -226,12 +226,17 @@ export function ReceptionPage() {
             <MapPin className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight">Recepción & Salón</h1>
-            <p className="text-xs text-text-tertiary">Plano del restaurante y lista de espera en vivo</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold tracking-tight">Recepción & Salón (30 Mesas)</h1>
+              <span className="text-[10px] font-mono font-extrabold px-2.5 py-0.5 rounded-pill bg-emerald/20 text-emerald border border-emerald/30 shadow-glowEmerald animate-pulse">
+                MESAS LIBRES: {tables.filter((t) => !sessionByTableId[t.id] && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
+              </span>
+            </div>
+            <p className="text-xs text-text-tertiary">Control central de asignación (Modo Libre / Modo Dirigido)</p>
           </div>
         </div>
 
-        {/* Waiter Assign Selector */}
+        {/* Waiter Assign Selector & Actions */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-surface-2 border border-white/5 rounded-pill px-3 py-1.5 text-xs">
             <span className="text-text-tertiary font-medium">Mozo asignado:</span>

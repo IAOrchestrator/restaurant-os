@@ -9,12 +9,14 @@ import {
 } from '@restaurant-os/domain';
 import type { TableSessionRepository } from '../../ports/table-session-repository';
 import type { TableRepository } from '../../ports/table-repository';
+import type { OrderRepository } from '../../ports/order-repository';
 import type { EventPublisher } from '../../ports/event-publisher';
 
 export interface CloseTableSessionInput {
   sessionId: string;
   actorType?: ActorType;
   actorId?: string | null;
+  onlyIfNoConsumption?: boolean;
 }
 
 export class CloseTableSessionUseCase {
@@ -22,12 +24,25 @@ export class CloseTableSessionUseCase {
     private readonly tableRepo: TableRepository,
     private readonly sessionRepo: TableSessionRepository,
     private readonly eventPublisher: EventPublisher,
+    private readonly orderRepo?: OrderRepository,
   ) {}
 
   async execute(input: CloseTableSessionInput): Promise<Result<TableSession, Error>> {
     const session = await this.sessionRepo.findById(input.sessionId);
     if (!session) {
       return err(new Error('TableSession not found'));
+    }
+
+    if (input.onlyIfNoConsumption && this.orderRepo) {
+      const orders = await this.orderRepo.findByTableSessionId(session.id);
+      const activeOrders = orders.filter((o) => o.status !== 'CANCELLED' && o.items.length > 0);
+      if (activeOrders.length > 0) {
+        return err(
+          new Error(
+            'No se puede liberar la mesa: posee pedidos registrados. El cobro y cierre debe realizarse desde Caja.',
+          ),
+        );
+      }
     }
 
     let targetSession = session;

@@ -22,6 +22,7 @@ import {
   RemoveCustomerFromSessionUseCase,
   type TableRepository,
   type TableSessionRepository,
+  type OrderRepository,
   type EventPublisher,
   type TransactionRunner,
 } from '@restaurant-os/application';
@@ -30,6 +31,7 @@ export interface TableSessionRoutesOptions {
   tableRepo: TableRepository;
   sessionRepo: TableSessionRepository;
   eventPublisher: EventPublisher;
+  orderRepo?: OrderRepository;
   txRunner?: TransactionRunner;
 }
 
@@ -46,6 +48,7 @@ export async function tableSessionRoutes(
     opts.tableRepo,
     opts.sessionRepo,
     opts.eventPublisher,
+    opts.orderRepo,
   );
   const changeWaiterUseCase = new ChangeWaiterUseCase(
     opts.sessionRepo,
@@ -169,7 +172,13 @@ export async function tableSessionRoutes(
       return reply.status(403).send({ error: 'Forbidden', message: 'Access denied to other restaurant data' });
     }
 
-    const result = await closeUseCase.execute({ sessionId: id });
+    const isOnlyWaiter = request.actor?.roles?.includes('WAITER') && !request.actor?.roles?.includes('CASHIER') && !request.actor?.roles?.includes('ADMIN');
+    const result = await closeUseCase.execute({
+      sessionId: id,
+      actorType: request.actor?.type,
+      actorId: request.actor?.id,
+      onlyIfNoConsumption: isOnlyWaiter,
+    });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
     }

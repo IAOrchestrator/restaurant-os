@@ -488,9 +488,9 @@ export function WaiterPage() {
           </div>
         </div>
 
-        {/* Filter Toggle */}
+        {/* Filter Toggle & Live Counter */}
         <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setTableFilter('MINE')}
               className={`px-3 py-1 rounded-pill font-medium transition ${
@@ -508,14 +508,20 @@ export function WaiterPage() {
               Todas ({tables.length})
             </button>
           </div>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="p-1 text-text-secondary hover:text-white transition"
-            title="Refrescar"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-pill bg-emerald/15 text-emerald border border-emerald/30 shadow-sm">
+              LIBRES: {tables.filter((t) => !sessionByTableId[t.id] && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
+            </span>
+            <button
+              onClick={fetchData}
+              disabled={loading}
+              className="p-1 text-text-secondary hover:text-white transition"
+              title="Refrescar"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </header>
 

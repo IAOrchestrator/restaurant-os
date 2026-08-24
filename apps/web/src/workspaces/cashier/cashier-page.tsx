@@ -36,6 +36,8 @@ export function CashierPage() {
   const { request } = useApi();
 
   const [accounts, setAccounts] = useState<BillingAccount[]>([]);
+  const [tables, setTables] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<BillingAccount | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -53,6 +55,9 @@ export function CashierPage() {
         request<any[]>(`/api/staff?restaurantId=${restaurantId}`),
         request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
       ]);
+
+      if (tablesRes.data) setTables(tablesRes.data);
+      if (sessionsRes.data) setSessions(sessionsRes.data.filter((s) => s.status !== 'CLOSED'));
 
       const tableMap = (tablesRes.data || []).reduce<Record<string, number>>((acc, t) => {
         acc[t.id] = t.number;
@@ -255,6 +260,9 @@ export function CashierPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <span className="text-xs font-mono font-extrabold px-3 py-1 rounded-pill bg-emerald/15 text-emerald border border-emerald/30 shadow-sm">
+            MESAS LIBRES: {tables.filter((t) => !sessions.some((s) => s.tableId === t.id) && t.status === 'AVAILABLE').length}/{tables.length > 0 ? tables.length : 30}
+          </span>
           <span className="text-xs font-mono px-3 py-1 rounded-pill bg-surface-2 text-text-secondary border border-white/5">
             {openAccounts.length} cuentas abiertas
           </span>

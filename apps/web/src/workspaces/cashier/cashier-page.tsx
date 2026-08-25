@@ -17,8 +17,11 @@ import {
   Percent,
   Camera,
   Scan,
+  KeyRound,
+  Zap,
 } from 'lucide-react';
 import { QrScannerModal, type QrPayload } from '../../components/shared/QrScannerModal';
+import { PinNumpadModal } from '../../components/auth/PinNumpadModal';
 
 export interface BillingAccount {
   id: string;
@@ -66,6 +69,7 @@ export function CashierPage() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'QR'>('CASH');
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -471,6 +475,14 @@ export function CashierPage() {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setShowPinModal(true)}
+            className="h-9 px-3 rounded-pill bg-amber/20 hover:bg-amber/30 text-amber border border-amber/40 text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+            title="Cambiar cajero con PIN rápido"
+          >
+            <Zap className="w-4 h-4" />
+            <span>⚡ PIN Operador</span>
+          </button>
+          <button
             onClick={() => setShowScannerModal(true)}
             className="h-9 px-3.5 rounded-pill bg-amber text-black hover:bg-amber-hover text-xs font-bold flex items-center gap-1.5 shadow-glowAmber transition active:scale-95 cursor-pointer"
             title="Escanear QR de cliente para cobro"
@@ -492,6 +504,18 @@ export function CashierPage() {
           </button>
         </div>
       </header>
+
+      {/* PIN Numpad Modal for Cashier Quick Operator Switch */}
+      <PinNumpadModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onSuccess={() => {
+          setMsg({ type: 'success', text: '⚡ Cajero verificado y activado con PIN.' });
+          fetchAccounts();
+        }}
+        title="Cambio Rápido de Cajero"
+        subtitle="Ingresa tu PIN de 4 dígitos para identificarte en este puesto de Caja"
+      />
 
       {/* QR Scanner Modal */}
       <QrScannerModal

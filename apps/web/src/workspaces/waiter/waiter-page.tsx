@@ -21,8 +21,11 @@ import {
   CheckCircle2,
   Camera,
   Scan,
+  KeyRound,
+  Zap,
 } from 'lucide-react';
 import { QrScannerModal, type QrPayload } from '../../components/shared/QrScannerModal';
+import { PinNumpadModal } from '../../components/auth/PinNumpadModal';
 
 export interface TableSessionItem {
   id: string;
@@ -101,10 +104,10 @@ export function WaiterPage() {
   const [targetWaiterId, setTargetWaiterId] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Active waiter in this terminal
   const [currentWaiterId, setCurrentWaiterId] = useState<string>(actorId || '');
   const [tableFilter, setTableFilter] = useState<'MINE' | 'ALL'>('MINE');
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const [scannerFeedback, setScannerFeedback] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -514,7 +517,15 @@ export function WaiterPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowPinModal(true)}
+              className="h-7 px-2.5 rounded-pill bg-amber/20 hover:bg-amber/30 text-amber border border-amber/40 text-[11px] font-extrabold flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
+              title="Cambiar operador con PIN rápido"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>⚡ PIN</span>
+            </button>
             <button
               onClick={() => setShowScannerModal(true)}
               className="h-7 px-2.5 rounded-pill bg-amber text-black hover:bg-amber-hover text-[11px] font-bold flex items-center gap-1 shadow-glowAmber transition active:scale-95 cursor-pointer"
@@ -529,7 +540,7 @@ export function WaiterPage() {
             <button
               onClick={fetchData}
               disabled={loading}
-              className="p-1 text-text-secondary hover:text-white transition"
+              className="p-1 text-text-secondary hover:text-white transition cursor-pointer"
               title="Refrescar"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -537,6 +548,18 @@ export function WaiterPage() {
           </div>
         </div>
       </header>
+
+      {/* PIN Numpad Modal for Quick Operator Switch */}
+      <PinNumpadModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onSuccess={() => {
+          setMsg({ type: 'success', text: '⚡ Operador verificado y activado con éxito.' });
+          fetchData();
+        }}
+        title="Cambio Rápido de Mozo"
+        subtitle="Ingresa tu PIN de 4 dígitos para identificarte en esta tablet"
+      />
 
       {/* Scanner feedback */}
       {scannerFeedback && (

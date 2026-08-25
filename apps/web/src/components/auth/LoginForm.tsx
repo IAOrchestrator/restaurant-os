@@ -11,13 +11,16 @@ import {
   AlertCircle,
   ArrowRight,
   ShieldCheck,
+  Zap,
 } from 'lucide-react';
+import { PinNumpadModal } from './PinNumpadModal';
 
 export function LoginForm() {
   const { loginStaff, loginTableDevice, loginCustomerSession, authError, setAuthError } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'STAFF' | 'TABLE_DEVICE' | 'CUSTOMER'>('STAFF');
   const [loading, setLoading] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
 
   // Common
   const [restaurantId, setRestaurantId] = useState('a0000000-0000-0000-0000-000000000001');
@@ -301,8 +304,27 @@ export function LoginForm() {
               {loading ? 'Verificando...' : 'Iniciar Sesión'}
               <ArrowRight className="w-4 h-4" />
             </button>
+
+            <div className="pt-2 border-t border-white/5 text-center">
+              <button
+                type="button"
+                onClick={() => setShowPinModal(true)}
+                className="w-full py-2 rounded-lg bg-surface-2 hover:bg-white/10 text-amber border border-amber/30 text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-sm"
+              >
+                <Zap className="w-4 h-4" />
+                <span>Abrir Teclado de PIN Rápido</span>
+              </button>
+            </div>
           </form>
         )}
+
+        {/* PIN Numpad Modal */}
+        <PinNumpadModal
+          isOpen={showPinModal}
+          onClose={() => setShowPinModal(false)}
+          title="Ingreso Rápido con PIN"
+          subtitle="Ingresa tu código PIN de 4 dígitos para ingresar"
+        />
 
         {/* TABLE DEVICE FORM */}
         {activeTab === 'TABLE_DEVICE' && (

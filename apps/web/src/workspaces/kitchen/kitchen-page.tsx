@@ -168,6 +168,20 @@ export function KitchenPage() {
                 sector: t.sector,
               }));
 
+              const rawStatus = String(t.status || ko.status || rawOrder?.status || 'RECEIVED').toUpperCase();
+              let normalizedStatus: 'RECEIVED' | 'STARTED' | 'NEARLY_READY' | 'READY' | 'COMPLETED' = 'RECEIVED';
+              if (rawStatus === 'STARTED' || rawStatus === 'PREPARING' || rawStatus === 'IN_PREPARATION') {
+                normalizedStatus = 'STARTED';
+              } else if (rawStatus === 'NEARLY_READY') {
+                normalizedStatus = 'NEARLY_READY';
+              } else if (rawStatus === 'READY') {
+                normalizedStatus = 'READY';
+              } else if (rawStatus === 'COMPLETED' || rawStatus === 'DELIVERED') {
+                normalizedStatus = 'COMPLETED';
+              } else {
+                normalizedStatus = 'RECEIVED';
+              }
+
               generatedTickets.push({
                 id: `${ko.id}-${t.sector}`,
                 kitchenOrderId: ko.id,
@@ -177,7 +191,7 @@ export function KitchenPage() {
                 restaurantId: ko.restaurantId,
                 tableNumber: tableNum,
                 channel,
-                status: ko.status,
+                status: normalizedStatus,
                 items: ticketItems,
                 priority: (ko.priority > 0 ? 'URGENT' : 'NORMAL') as any,
                 receivedAt: ko.receivedAt || ko.createdAt || new Date().toISOString(),
@@ -200,6 +214,20 @@ export function KitchenPage() {
             const sector = ko.sector || 'PIZZAS';
             const tableLabel = tableNum ? `M${tableNum}` : (channel === 'TAKEAWAY' ? 'L-45' : 'ORD');
 
+            const rawStatus = String(ko.status || rawOrder?.status || 'RECEIVED').toUpperCase();
+            let normalizedStatus: 'RECEIVED' | 'STARTED' | 'NEARLY_READY' | 'READY' | 'COMPLETED' = 'RECEIVED';
+            if (rawStatus === 'STARTED' || rawStatus === 'PREPARING' || rawStatus === 'IN_PREPARATION') {
+              normalizedStatus = 'STARTED';
+            } else if (rawStatus === 'NEARLY_READY') {
+              normalizedStatus = 'NEARLY_READY';
+            } else if (rawStatus === 'READY') {
+              normalizedStatus = 'READY';
+            } else if (rawStatus === 'COMPLETED' || rawStatus === 'DELIVERED') {
+              normalizedStatus = 'COMPLETED';
+            } else {
+              normalizedStatus = 'RECEIVED';
+            }
+
             generatedTickets.push({
               id: ko.id,
               kitchenOrderId: ko.id,
@@ -209,7 +237,7 @@ export function KitchenPage() {
               restaurantId: ko.restaurantId,
               tableNumber: tableNum,
               channel,
-              status: ko.status,
+              status: normalizedStatus,
               items,
               priority: (ko.priority > 0 ? 'URGENT' : 'NORMAL') as any,
               receivedAt: ko.receivedAt || ko.createdAt || new Date().toISOString(),

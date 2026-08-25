@@ -50,8 +50,9 @@ export function TvPickupPage() {
   const fetchTakeawayOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, productsRes, customersRes] = await Promise.all([
+      const [ordersRes, kitchenRes, productsRes, customersRes] = await Promise.all([
         request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
+        request<any[]>(`/api/kitchen/orders?restaurantId=${restaurantId}`),
         request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
         request<any[]>(`/api/customers?restaurantId=${restaurantId}`),
       ]);
@@ -66,25 +67,52 @@ export function TvPickupPage() {
         return acc;
       }, {});
 
+      const kitchenOrderMap = (kitchenRes.data || []).reduce<Record<string, any>>((acc, k) => {
+        acc[k.orderId] = k;
+        return acc;
+      }, {});
+
+      // Read local codes if available
+      const localCodeMap: Record<string, string> = {};
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('restaurant_os_customer_state_')) {
+              const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+              if (parsed.activePreOrder?.orderId && parsed.activePreOrder?.code) {
+                localCodeMap[parsed.activePreOrder.orderId] = parsed.activePreOrder.code;
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const combined: TakeawayOrder[] = [];
 
-      // Only display orders that are PAID and in active kitchen preparation or ready to be picked up
+      // Display orders that are in active kitchen preparation or ready to be picked up
       if (ordersRes.data) {
         ordersRes.data
           .filter(
             (o) =>
-              (o.type === 'TAKEAWAY' || !o.tableSessionId) &&
+              (o.type === 'TAKEAWAY' || o.type === 'DELIVERY' || !o.tableSessionId || o.tableSessionId === '00000000-0000-0000-0000-000000000000') &&
               o.status !== 'CANCELLED' &&
-              o.status !== 'DELIVERED' &&
-              (o.isPaid || o.status === 'SENT_TO_KITCHEN' || o.status === 'PREPARING' || o.status === 'READY'),
+              o.status !== 'DELIVERED',
           )
           .forEach((o) => {
-            const shortCode = o.id.length >= 2 ? o.id.replace(/[^a-zA-Z0-9]/g, '').slice(-2).toUpperCase() || '45' : '45';
+            const ko = kitchenOrderMap[o.id];
+            const effectiveStatus = (ko?.status === 'READY' || o.status === 'READY') ? 'READY' : (o.status || ko?.status || 'PREPARING');
+
+            const shortCode = o.id.replace(/\D/g, '').slice(-2) || '45';
+            const code = localCodeMap[o.id] || `#L-${shortCode.padStart(2, '0')}`;
+
             combined.push({
               id: o.id,
-              code: `#L-${shortCode}`,
+              code,
               customerName: customerMap[o.customerId] || 'Cliente Retiro',
-              status: o.status,
+              status: effectiveStatus,
               isPaid: o.isPaid ?? true,
               totalAmount: o.totalAmount || 0,
               items: (o.items || []).map((it: any) => ({
@@ -114,6 +142,7 @@ export function TvPickupPage() {
   // Real-time SSE synchronization
   useSse({
     token: authToken,
+    restaurantId,
     eventTypes: [
       'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
@@ -140,7 +169,7 @@ export function TvPickupPage() {
   };
 
   const preparingOrders = orders.filter(
-    (o) => o.status === 'SENT_TO_KITCHEN' || o.status === 'PREPARING' || o.status === 'CONFIRMED',
+    (o) => o.status !== 'READY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED',
   );
 
   const readyOrders = orders.filter((o) => o.status === 'READY');

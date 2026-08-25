@@ -74,7 +74,7 @@ export function CashierPage() {
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const [accRes, sessionsRes, tablesRes, ordersRes, preOrdersRes, staffRes, prodsRes, tasksRes, custsRes] =
+      const [accRes, sessionsRes, tablesRes, ordersRes, preOrdersRes, staffRes, prodsRes, tasksRes, liveQrsRes] =
         await Promise.all([
           request<any[]>(`/api/billing/accounts?restaurantId=${restaurantId}`),
           request<any[]>(`/api/table-sessions?restaurantId=${restaurantId}`),
@@ -84,7 +84,7 @@ export function CashierPage() {
           request<any[]>(`/api/staff?restaurantId=${restaurantId}`),
           request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
           request<any[]>(`/api/service/tasks?restaurantId=${restaurantId}`),
-          request<any[]>('/api/customers'),
+          request<any[]>(`/api/analytics/live-qrs?restaurantId=${restaurantId}`),
         ]);
 
       if (tablesRes.data) setTables(tablesRes.data);
@@ -102,11 +102,6 @@ export function CashierPage() {
 
       const productMap = (prodsRes.data || []).reduce<Record<string, { name: string; price: number }>>((acc, p) => {
         acc[p.id] = { name: p.name, price: p.price };
-        return acc;
-      }, {});
-
-      const customerMap = (custsRes.data || []).reduce<Record<string, string>>((acc, c) => {
-        acc[c.id] = c.name || `Cliente #${c.id.slice(0, 4)}`;
         return acc;
       }, {});
 
@@ -193,7 +188,7 @@ export function CashierPage() {
           id: `ord-${ord.id}`,
           orderId: ord.id,
           code,
-          customerName: customerMap[ord.customerId] || 'Cliente Retiro',
+          customerName: ord.customer?.name || 'Cliente Retiro',
           customerId: ord.customerId,
           totalAmount: total || ord.totalAmount || 14200,
           isPaid: Boolean(ord.isPaid),
@@ -209,7 +204,6 @@ export function CashierPage() {
       );
 
       for (const pre of activePreOrders) {
-        // Skip if already converted to order
         if (takeawayList.some((t) => t.customerId === pre.customerId)) continue;
 
         const itemsSummary = (pre.items || []).map((it: any) => {
@@ -229,7 +223,7 @@ export function CashierPage() {
           id: `pre-${pre.id}`,
           preOrderId: pre.id,
           code,
-          customerName: customerMap[pre.customerId] || 'Cliente Mostrador',
+          customerName: pre.customer?.name || 'Cliente Mostrador',
           customerId: pre.customerId,
           totalAmount: total || 14200,
           isPaid: false,
@@ -237,6 +231,67 @@ export function CashierPage() {
           items: itemsSummary,
           createdAt: pre.createdAt,
         });
+      }
+
+      // C) Sync from live-qrs endpoint for any active takeaway live QRs
+      if (Array.isArray(liveQrsRes.data)) {
+        for (const liveQr of liveQrsRes.data) {
+          if (liveQr.channel === 'TAKEAWAY') {
+            const alreadyInList = takeawayList.some((t) => t.code === liveQr.code || t.customerId === liveQr.customerId);
+            if (!alreadyInList) {
+              const itemsSummary = (liveQr.items || []).map((it: any) => ({
+                name: it.name || productMap[it.productId]?.name || 'Plato Retiro',
+                quantity: it.quantity || 1,
+                unitPrice: it.unitPrice || productMap[it.productId]?.price || 8000,
+              }));
+              takeawayList.push({
+                id: `live-${liveQr.id || liveQr.code}`,
+                code: liveQr.code,
+                customerName: liveQr.customerName || 'Cliente Mostrador',
+                customerId: liveQr.customerId,
+                totalAmount: liveQr.totalAmount || 14200,
+                isPaid: false,
+                status: 'PRE_ORDEN',
+                items: itemsSummary.length > 0 ? itemsSummary : [{ name: 'Comanda Retiro', quantity: 1, unitPrice: liveQr.totalAmount || 14200 }],
+                createdAt: liveQr.updatedAt || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      }
+
+      // D) LocalStorage fallback if current browser has an active local pre-order of type TAKEAWAY
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('restaurant_os_customer_state_')) {
+              const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+              if (parsed.activePreOrder && parsed.activePreOrder.type === 'TAKEAWAY') {
+                const code = parsed.activePreOrder.code;
+                if (!takeawayList.some((t) => t.code === code)) {
+                  const cartItems = (parsed.cart || []).map((c: any) => ({
+                    name: c.product?.name || 'Plato Retiro',
+                    quantity: c.quantity || 1,
+                    unitPrice: c.product?.price || 8000,
+                  }));
+                  takeawayList.push({
+                    id: `local-${code}`,
+                    code,
+                    customerName: parsed.customerName || 'Cliente Local #L-45',
+                    totalAmount: parsed.activePreOrder.totalAmount || 14200,
+                    isPaid: false,
+                    status: 'PRE_ORDEN',
+                    items: cartItems.length > 0 ? cartItems : [{ name: 'Comanda Retiro #L-45', quantity: 1, unitPrice: parsed.activePreOrder.totalAmount || 14200 }],
+                    createdAt: new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
       }
 
       setTakeawayOrders(takeawayList);

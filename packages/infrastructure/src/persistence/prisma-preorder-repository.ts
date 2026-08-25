@@ -32,6 +32,20 @@ export class PrismaPreOrderRepository implements PreOrderRepository {
 
   async save(preOrder: PreOrder): Promise<void> {
     const data = PreOrderMapper.toPrisma(preOrder);
+    if (preOrder.customerId) {
+      try {
+        await prisma.customer.upsert({
+          where: { id: preOrder.customerId },
+          update: {},
+          create: {
+            id: preOrder.customerId,
+            name: `Cliente #${preOrder.customerId.slice(0, 6)}`,
+          },
+        });
+      } catch {
+        // Continue
+      }
+    }
     await prisma.preOrder.upsert({
       where: { id: preOrder.id },
       update: data as any,

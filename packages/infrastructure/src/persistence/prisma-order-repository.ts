@@ -37,6 +37,20 @@ export class PrismaOrderRepository implements OrderRepository {
 
   async save(order: Order): Promise<void> {
     const data = OrderMapper.toPrisma(order);
+    if (order.customerId) {
+      try {
+        await (this.db as any).customer.upsert({
+          where: { id: order.customerId },
+          update: {},
+          create: {
+            id: order.customerId,
+            name: `Cliente #${order.customerId.slice(0, 6)}`,
+          },
+        });
+      } catch {
+        // Continue
+      }
+    }
     await this.db.order.upsert({
       where: { id: order.id },
       update: data as any,

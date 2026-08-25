@@ -149,6 +149,20 @@ export async function authRoutes(app: FastifyInstance, opts: AuthRoutesOptions) 
       }
     }
 
+    // Ensure customer record is saved in DB for relational integrity
+    try {
+      await prisma.customer.upsert({
+        where: { id: customerId },
+        update: { name: name || undefined },
+        create: {
+          id: customerId,
+          name: name || `Cliente #${customerId.slice(0, 6)}`,
+        },
+      });
+    } catch {
+      // Non-blocking in case of offline DB
+    }
+
     const token = jwt.sign({
       sub: customerId,
       type: 'CUSTOMER',

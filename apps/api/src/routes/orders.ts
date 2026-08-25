@@ -84,13 +84,15 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
       // Enforce fine-grained contextual scoping for TABLE_DEVICE and CUSTOMER
       const scoper = request.resourceScoper;
       if (scoper && (request.actor.isTableDevice() || request.actor.isCustomer())) {
-        const sessionScope = await scoper.getScope(request.actor, 'table-session');
-        if (sessionScope.isOwn() && sessionScope.resourceIds !== null) {
-          if (!sessionScope.canAccess(parsed.data.tableSessionId)) {
-            return reply.status(403).send({
-              error: 'Forbidden',
-              message: `Access denied to table session outside actor scope: ${parsed.data.tableSessionId}`,
-            });
+        if (parsed.data.tableSessionId) {
+          const sessionScope = await scoper.getScope(request.actor, 'table-session');
+          if (sessionScope.isOwn() && sessionScope.resourceIds !== null) {
+            if (!sessionScope.canAccess(parsed.data.tableSessionId)) {
+              return reply.status(403).send({
+                error: 'Forbidden',
+                message: `Access denied to table session outside actor scope: ${parsed.data.tableSessionId}`,
+              });
+            }
           }
         }
       }
@@ -98,9 +100,10 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
       const result = await createUseCase.execute({
         id: parsed.data.id ?? randomUUID(),
         restaurantId: parsed.data.restaurantId,
-        tableSessionId: parsed.data.tableSessionId,
+        tableSessionId: parsed.data.tableSessionId ?? '00000000-0000-0000-0000-000000000000',
         customerId: parsed.data.customerId ?? null,
         preOrderId: parsed.data.preOrderId ?? null,
+        type: parsed.data.type,
         items: parsed.data.items,
       });
 

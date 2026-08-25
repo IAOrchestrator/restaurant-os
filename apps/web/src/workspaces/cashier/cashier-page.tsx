@@ -61,6 +61,7 @@ export function CashierPage() {
   const [takeawayOrders, setTakeawayOrders] = useState<TakeawayOrderCard[]>([]);
   const [tables, setTables] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [selectedAccount, setSelectedAccount] = useState<BillingAccount | null>(null);
@@ -89,6 +90,7 @@ export function CashierPage() {
 
       if (tablesRes.data) setTables(tablesRes.data);
       if (sessionsRes.data) setSessions(sessionsRes.data.filter((s) => s.status !== 'CLOSED'));
+      if (prodsRes.data) setProducts(prodsRes.data);
 
       const tableMap = (tablesRes.data || []).reduce<Record<string, number>>((acc, t) => {
         acc[t.id] = t.number;
@@ -294,9 +296,19 @@ export function CashierPage() {
         }
       }
 
-      setTakeawayOrders(takeawayList);
+      // Strictly enforce 1 CLIENT = 1 UNIQUE TICKET in Cashier
+      const uniqueTakeawayMap = new Map<string, TakeawayOrderCard>();
+      for (const tk of takeawayList) {
+        const key = tk.customerId || tk.code;
+        if (!uniqueTakeawayMap.has(key)) {
+          uniqueTakeawayMap.set(key, tk);
+        }
+      }
+      const deduplicatedList = Array.from(uniqueTakeawayMap.values());
+
+      setTakeawayOrders(deduplicatedList);
       if (selectedTakeaway) {
-        const updatedTk = takeawayList.find((t) => t.id === selectedTakeaway.id);
+        const updatedTk = deduplicatedList.find((t) => t.id === selectedTakeaway.id || t.code === selectedTakeaway.code);
         setSelectedTakeaway(updatedTk || null);
       }
     } catch {
@@ -458,51 +470,44 @@ export function CashierPage() {
     try {
       let targetOrderId = tk.orderId;
 
-      // If it's a pre-order, create the formal order first
-      if (!targetOrderId && tk.preOrderId) {
-        const createRes = await request<any>('/api/orders', {
-          method: 'POST',
-          body: JSON.stringify({
-            restaurantId,
-            customerId: tk.customerId || actorId,
-            type: 'TAKEAWAY',
-            items: tk.items.map((it) => ({
-              productId: it.name,
-              quantity: it.quantity,
-              unitPrice: it.unitPrice,
-            })),
-          }),
+      // 1. Confirm the pre-order if it was a pre-order
+      if (tk.preOrderId) {
+        await request(`/api/preorders/${tk.preOrderId}/confirm`, {
+          method: 'PATCH',
         });
-
-        if (createRes.data) {
-          targetOrderId = createRes.data.id;
-        }
       }
 
+      // 2. Dispatch to kitchen if formal order exists
       if (targetOrderId) {
-        // Send to kitchen with payment triggered (KDS ticket created!)
-        const sendRes = await request(`/api/orders/${targetOrderId}/send-to-kitchen`, {
+        await request(`/api/orders/${targetOrderId}/send-to-kitchen`, {
           method: 'POST',
           body: JSON.stringify({
             isPaymentTriggered: true,
           }),
         });
+      }
 
-        if (sendRes.data || sendRes.status === 200) {
-          setMsg({
-            type: 'success',
-            text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) con ${paymentMethod} y despachado a Cocina KDS! Aparecerá en TV Barra Retiro cuando esté listo.`,
-          });
-          setSelectedTakeaway(null);
-          fetchAccounts();
-          return;
+      // 3. Clean up any local storage tracking
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('restaurant_os_customer_state_')) {
+              const item = JSON.parse(localStorage.getItem(key) || '{}');
+              if (item.activePreOrder?.code === tk.code) {
+                item.activePreOrder.status = 'PAID_PREPARING';
+                localStorage.setItem(key, JSON.stringify(item));
+              }
+            }
+          }
+        } catch {
+          // ignore
         }
       }
 
-      // Fallback direct confirmation
       setMsg({
         type: 'success',
-        text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) y despachado con éxito!`,
+        text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) con ${paymentMethod} y despachado a Cocina KDS! Aparecerá en TV Barra Retiro cuando esté listo.`,
       });
       setSelectedTakeaway(null);
       fetchAccounts();

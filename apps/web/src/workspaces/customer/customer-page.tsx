@@ -167,16 +167,18 @@ export function CustomerPage() {
     );
   };
 
+  const [isSubmittingPreOrder, setIsSubmittingPreOrder] = useState(false);
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   // Submit Pre-Order (Generates Live QR #P-12, #L-45 or #D-45)
   const handleGeneratePreOrder = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isSubmittingPreOrder) return;
+    setIsSubmittingPreOrder(true);
     setMsg(null);
 
     const codePrefix = channel === 'SALON' ? '#P' : (channel === 'TAKEAWAY' ? '#L' : '#D');
-    const randomNum = Math.floor(10 + Math.random() * 89);
-    const generatedCode = `${codePrefix}-${randomNum}`;
+    // Reuse existing code if same channel or generate a fresh one
+    const generatedCode = activePreOrder?.type === channel ? activePreOrder.code : `${codePrefix}-${Math.floor(10 + Math.random() * 89)}`;
 
     try {
       // 1. Post Pre-Order to DB
@@ -210,6 +212,8 @@ export function CustomerPage() {
       }
     } catch {
       // Offline fallback
+    } finally {
+      setIsSubmittingPreOrder(false);
     }
 
     const preOrderObj = {
@@ -224,7 +228,7 @@ export function CustomerPage() {
 
     setMsg({
       type: 'success',
-      text: `✨ ¡Pre-orden generada con éxito! Muestra tu código ${generatedCode} para continuar.`,
+      text: `✨ ¡Pre-orden ${activePreOrder ? 'actualizada' : 'generada'} con éxito! Muestra tu código ${generatedCode} en Caja.`,
     });
   };
 
@@ -600,9 +604,16 @@ export function CustomerPage() {
 
           <button
             onClick={handleGeneratePreOrder}
-            className="w-full h-10 rounded-pill bg-amber text-black hover:bg-amber-hover font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-glowAmber transition active:scale-95"
+            disabled={isSubmittingPreOrder}
+            className="w-full h-10 rounded-pill bg-amber text-black hover:bg-amber-hover font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-glowAmber transition active:scale-95 disabled:opacity-50 cursor-pointer"
           >
-            <span>Generar Pre-Orden ({channel === 'SALON' ? '#P-12' : (channel === 'TAKEAWAY' ? '#L-45' : '#D-45')})</span>
+            <span>
+              {isSubmittingPreOrder
+                ? 'Generando pre-orden...'
+                : activePreOrder
+                ? `Actualizar Pre-Orden (${activePreOrder.code})`
+                : `Generar Pre-Orden (${channel === 'SALON' ? '#P-12' : (channel === 'TAKEAWAY' ? '#L-45' : '#D-45')})`}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

@@ -291,7 +291,7 @@ export const OrderItemSchema = z.object({
 export const CreateOrderSchema = z.object({
   id: UuidSchema.optional(),
   restaurantId: UuidSchema,
-  tableSessionId: UuidSchema,
+  tableSessionId: UuidSchema.optional().nullable(),
   customerId: UuidSchema.nullable().optional(),
   preOrderId: UuidSchema.nullable().optional(),
   type: OrderTypeSchema.optional().default('DINE_IN'),
@@ -303,7 +303,7 @@ export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 export const OrderResponseSchema = z.object({
   id: UuidSchema,
   restaurantId: UuidSchema,
-  tableSessionId: UuidSchema,
+  tableSessionId: UuidSchema.optional().nullable(),
   customerId: UuidSchema.nullable(),
   status: OrderStatusSchema,
   type: OrderTypeSchema.optional().default('DINE_IN'),

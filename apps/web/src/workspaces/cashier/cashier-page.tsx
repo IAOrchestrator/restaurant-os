@@ -323,12 +323,17 @@ export function CashierPage() {
         const updatedTk = deduplicatedList.find((t) => t.id === selectedTakeaway.id || t.code === selectedTakeaway.code);
         setSelectedTakeaway(updatedTk || null);
       }
+
+      const openSalonCount = unifiedCards.filter((a) => a.status === 'OPEN' || a.hasBillRequested || a.balance > 0).length;
+      if (openSalonCount === 0 && deduplicatedList.length > 0 && activeTab === 'SALON') {
+        setActiveTab('TAKEAWAY');
+      }
     } catch {
       // safe fallback
     } finally {
       setLoading(false);
     }
-  }, [request, restaurantId, selectedAccount, selectedTakeaway]);
+  }, [request, restaurantId, selectedAccount, selectedTakeaway, activeTab]);
 
   useEffect(() => {
     fetchAccounts();

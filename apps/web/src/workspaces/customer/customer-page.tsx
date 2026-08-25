@@ -18,6 +18,7 @@ import {
   MapPin,
   Clock,
   ArrowRight,
+  Trash2,
 } from 'lucide-react';
 import { QrCodeVisual } from '../../components/shared/QrCodeVisual';
 
@@ -53,6 +54,8 @@ export function CustomerPage() {
     status: string;
     totalAmount: number;
     itemsCount: number;
+    orderId?: string;
+    preOrderId?: string;
   } | null>(null);
 
   const [rating, setRating] = useState(5);
@@ -114,12 +117,14 @@ export function CustomerPage() {
   // Real-time SSE synchronization
   useSse({
     token: authToken,
+    restaurantId,
     eventTypes: [
       'CUSTOMER_CALLED',
       'CUSTOMER_CONFIRMED',
       'CUSTOMER_SEATED',
       'ORDER_CONFIRMED',
       'ORDER_SENT_TO_KITCHEN',
+      'PREORDER_UPDATED',
       'ORDER_READY',
       'ORDER_DELIVERED',
       'PAYMENT_REGISTERED',
@@ -127,6 +132,16 @@ export function CustomerPage() {
     ],
     onEvent: (event) => {
       fetchMenu();
+      if (
+        (event.type === 'ORDER_SENT_TO_KITCHEN' || event.type === 'PREORDER_UPDATED' || event.type === 'PAYMENT_REGISTERED') &&
+        activePreOrder
+      ) {
+        setActivePreOrder((prev) => (prev ? { ...prev, status: 'EN_PREPARACION' } : null));
+        setMsg({
+          type: 'info' as any,
+          text: `👨‍🍳 ¡Tu pedido ${activePreOrder.code} fue cobrado y está en preparación en cocina!`,
+        });
+      }
       if (event.type === 'ORDER_READY' && activePreOrder) {
         setActivePreOrder((prev) => (prev ? { ...prev, status: 'LISTO_PARA_RETIRAR' } : null));
         setMsg({
@@ -134,11 +149,54 @@ export function CustomerPage() {
           text: `✨ ¡Tu pedido ${activePreOrder.code} está listo para retirar en la barra!`,
         });
       }
+      if (event.type === 'ORDER_DELIVERED' && activePreOrder) {
+        setActivePreOrder(null);
+        setCart([]);
+        setMsg({
+          type: 'success',
+          text: `🎉 ¡Pedido entregado! Gracias por tu visita.`,
+        });
+      }
     },
     onReconnect: () => {
       fetchMenu();
     },
   });
+
+  // Polling synchronization for active pre-order / order status
+  useEffect(() => {
+    if (!activePreOrder) return;
+    const syncStatus = async () => {
+      try {
+        if (activePreOrder.orderId) {
+          const ordRes = await request<any>(`/api/orders/${activePreOrder.orderId}`);
+          if (ordRes.data) {
+            const status = ordRes.data.status;
+            if (status === 'READY') {
+              setActivePreOrder((prev) => (prev ? { ...prev, status: 'LISTO_PARA_RETIRAR' } : null));
+            } else if (status === 'SENT_TO_KITCHEN' || status === 'PREPARING' || ordRes.data.isPaid) {
+              setActivePreOrder((prev) => (prev ? { ...prev, status: 'EN_PREPARACION' } : null));
+            } else if (status === 'DELIVERED') {
+              setActivePreOrder(null);
+              setCart([]);
+            }
+          }
+        } else if (activePreOrder.preOrderId) {
+          const preRes = await request<any>(`/api/preorders/${activePreOrder.preOrderId}`);
+          if (preRes.data) {
+            if (preRes.data.status === 'CONFIRMED' || preRes.data.status === 'CONVERTED_TO_ORDER') {
+              setActivePreOrder((prev) => (prev ? { ...prev, status: 'EN_PREPARACION' } : null));
+            }
+          }
+        }
+      } catch {
+        // safe fallback
+      }
+    };
+    syncStatus();
+    const interval = setInterval(syncStatus, 3000);
+    return () => clearInterval(interval);
+  }, [activePreOrder?.orderId, activePreOrder?.preOrderId, request]);
 
   // Cart operations
   const addToCart = (product: CatalogProduct) => {
@@ -414,9 +472,24 @@ export function CustomerPage() {
             </button>
           )}
 
-          {/* Placeholder for Gmail Login */}
+          {/* Actions & Gmail */}
           {activePreOrder.status !== 'DELIVERED' && (
-            <div className="mt-3 pt-3 border-t border-white/10">
+            <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePreOrder(null);
+                  setCart([]);
+                  const savedKey = `restaurant_os_customer_state_${restaurantId}_${actorId || 'anon'}`;
+                  localStorage.removeItem(savedKey);
+                  setMsg({ type: 'success', text: '🗑️ Pedido cancelado y limpiado.' });
+                }}
+                className="text-[11px] text-text-tertiary hover:text-crimson transition flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Cancelar / Limpiar</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() =>
@@ -425,9 +498,9 @@ export function CustomerPage() {
                     text: 'ℹ️ Vinculación con Gmail OAuth se habilitará en Fase 3. ¡Tu sesión actual ya funciona sin fricción!',
                   })
                 }
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-white bg-surface-2 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-pill transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary hover:text-white bg-surface-2 hover:bg-white/10 border border-white/10 px-2.5 py-1 rounded-pill transition cursor-pointer"
               >
-                <span>✉️ Guardar con Gmail (Próximamente Fase 3)</span>
+                <span>✉️ Gmail (Fase 3)</span>
               </button>
             </div>
           )}

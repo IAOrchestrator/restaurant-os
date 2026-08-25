@@ -197,10 +197,14 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
   // Handler: send-to-kitchen
   const sendToKitchenHandler = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
+    const body = (request.body as any) || {};
     const result = await sendToKitchenUseCase.execute({
       orderId: id,
       actorType: request.actor?.type,
       actorId: request.actor?.id,
+      notes: body.notes,
+      priority: body.priority,
+      isPaymentTriggered: body.isPaymentTriggered,
     });
     if (!result.success) {
       return reply.status(400).send({ error: result.error.message });
@@ -217,8 +221,8 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
       updatedAt: result.value.updatedAt.toISOString(),
     });
   };
-  app.post('/:id/send-to-kitchen', { preHandler: [requirePermission(Permission.ORDERS_SEND_TO_KITCHEN), requireResourceAccess('order')] }, sendToKitchenHandler);
-  app.patch('/:id/send-to-kitchen', { preHandler: [requirePermission(Permission.ORDERS_SEND_TO_KITCHEN), requireResourceAccess('order')] }, sendToKitchenHandler);
+  app.post('/:id/send-to-kitchen', { preHandler: [requireAnyPermission(Permission.ORDERS_SEND_TO_KITCHEN, Permission.PAYMENTS_REGISTER, Permission.ACCOUNTS_CLOSE), requireResourceAccess('order')] }, sendToKitchenHandler);
+  app.patch('/:id/send-to-kitchen', { preHandler: [requireAnyPermission(Permission.ORDERS_SEND_TO_KITCHEN, Permission.PAYMENTS_REGISTER, Permission.ACCOUNTS_CLOSE), requireResourceAccess('order')] }, sendToKitchenHandler);
 
   // Handler: start-preparing
   const startPreparingHandler = async (request: any, reply: any) => {

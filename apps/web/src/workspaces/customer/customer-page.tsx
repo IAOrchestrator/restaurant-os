@@ -168,10 +168,11 @@ export function CustomerPage() {
   };
 
   const [isSubmittingPreOrder, setIsSubmittingPreOrder] = useState(false);
+  const [showDuplicateWarningModal, setShowDuplicateWarningModal] = useState(false);
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   // Submit Pre-Order (Generates Live QR #P-12, #L-45 or #D-45)
-  const handleGeneratePreOrder = async () => {
+  const executeGeneratePreOrder = async () => {
     if (cart.length === 0 || isSubmittingPreOrder) return;
     setIsSubmittingPreOrder(true);
     setMsg(null);
@@ -230,6 +231,14 @@ export function CustomerPage() {
       type: 'success',
       text: `✨ ¡Pre-orden ${activePreOrder ? 'actualizada' : 'generada'} con éxito! Muestra tu código ${generatedCode} en Caja.`,
     });
+  };
+
+  const onPreOrderButtonClick = () => {
+    if (activePreOrder && activePreOrder.status !== 'DELIVERED') {
+      setShowDuplicateWarningModal(true);
+    } else {
+      executeGeneratePreOrder();
+    }
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -603,7 +612,7 @@ export function CustomerPage() {
           </div>
 
           <button
-            onClick={handleGeneratePreOrder}
+            onClick={onPreOrderButtonClick}
             disabled={isSubmittingPreOrder}
             className="w-full h-10 rounded-pill bg-amber text-black hover:bg-amber-hover font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-glowAmber transition active:scale-95 disabled:opacity-50 cursor-pointer"
           >
@@ -616,6 +625,52 @@ export function CustomerPage() {
             </span>
             <ArrowRight className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Duplicate / Update Confirmation Modal */}
+      {showDuplicateWarningModal && activePreOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-surface-1 border border-amber/40 rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber">
+              <div className="w-10 h-10 rounded-full bg-amber/20 flex items-center justify-center text-xl">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">¿Modificar pedido actual?</h3>
+                <p className="text-xs text-amber font-mono font-bold">{activePreOrder.code}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Ya tienes un pedido activo (<span className="font-bold text-white">{activePreOrder.code}</span>) por{' '}
+              <span className="font-bold text-amber">${activePreOrder.totalAmount.toLocaleString()}</span>.
+              <br /><br />
+              ¿Deseas <strong>actualizarlo</strong> con los {cart.length} productos seleccionados (Nuevo Total: <strong>${cartTotal.toLocaleString()}</strong>) o fue un clic involuntario?
+            </p>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuplicateWarningModal(false);
+                  executeGeneratePreOrder();
+                }}
+                disabled={isSubmittingPreOrder}
+                className="w-full h-10 rounded-pill bg-amber text-black hover:bg-amber-hover font-bold text-xs flex items-center justify-center gap-2 shadow-glowAmber transition cursor-pointer"
+              >
+                <span>SÍ, MODIFICAR MI PEDIDO ({activePreOrder.code})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDuplicateWarningModal(false)}
+                className="w-full h-9 rounded-pill bg-surface-2 hover:bg-white/10 text-text-tertiary hover:text-white font-medium text-xs transition cursor-pointer"
+              >
+                <span>Cancelar / Mantener pedido anterior</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

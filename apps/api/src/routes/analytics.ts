@@ -10,6 +10,7 @@ import {
   PrismaOrderRepository,
   PrismaRawMaterialRepository,
   requirePermission,
+  requireAnyPermission,
   validateRestaurantAccess,
 } from '@restaurant-os/infrastructure';
 import { Permission } from '@restaurant-os/domain';
@@ -63,7 +64,12 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
     '/live-qrs',
     {
       preHandler: [
-        requirePermission(Permission.ANALYTICS_READ),
+        requireAnyPermission(
+          Permission.ANALYTICS_READ,
+          Permission.PREORDERS_READ,
+          Permission.ORDERS_READ,
+          Permission.ACCOUNTS_READ,
+        ),
         validateRestaurantAccess(),
       ],
     },

@@ -27,6 +27,7 @@ export interface BillingAccount {
   id: string;
   realAccountId?: string | null;
   tableSessionId: string;
+  tableId?: string;
   tableNumber: number;
   waiterName: string;
   totalAmount: number;
@@ -145,6 +146,7 @@ export function CashierPage() {
             id: existingAcc?.id || `session-acc-${session.id}`,
             realAccountId: existingAcc?.id || null,
             tableSessionId: session.id,
+            tableId: session.tableId,
             tableNumber: tableMap[session.tableId] || 1,
             waiterName: waiterMap[session.currentWaiterId] || 'Mozo asignado',
             totalAmount,
@@ -166,10 +168,9 @@ export function CashierPage() {
 
       // 2. Build Takeaway / Retiro Orders (#L-45)
       const takeawayList: TakeawayOrderCard[] = [];
-
       // A) Active Takeaway Orders from /orders
       const activeTakeawayOrders = activeOrders.filter(
-        (o) => o.type === 'TAKEAWAY' && (o.status === 'DRAFT' || o.status === 'CONFIRMED' || !o.isPaid),
+        (o) => (o.type === 'TAKEAWAY' || o.type === 'DELIVERY') && (o.status === 'DRAFT' || o.status === 'CONFIRMED' || !o.isPaid),
       );
 
       for (const ord of activeTakeawayOrders) {
@@ -183,7 +184,7 @@ export function CashierPage() {
         });
 
         const total = itemsSummary.reduce((s: number, it: any) => s + it.quantity * it.unitPrice, 0);
-        const codeNum = ord.id.slice(0, 2).replace(/\D/g, '') || '45';
+        const codeNum = ord.id.replace(/\D/g, '').slice(-2) || '45';
         const code = `#L-${codeNum.padStart(2, '0')}`;
 
         takeawayList.push({
@@ -206,7 +207,7 @@ export function CashierPage() {
       );
 
       for (const pre of activePreOrders) {
-        if (takeawayList.some((t) => t.customerId === pre.customerId)) continue;
+        if (takeawayList.some((t) => (t.customerId && t.customerId === pre.customerId) || (t.preOrderId && t.preOrderId === pre.id))) continue;
 
         const itemsSummary = (pre.items || []).map((it: any) => {
           const pInfo = productMap[it.productId];
@@ -218,7 +219,7 @@ export function CashierPage() {
         });
 
         const total = itemsSummary.reduce((s: number, it: any) => s + it.quantity * it.unitPrice, 0);
-        const codeNum = pre.id.slice(0, 2).replace(/\D/g, '') || '45';
+        const codeNum = pre.id.replace(/\D/g, '').slice(-2) || '45';
         const code = `#L-${codeNum.padStart(2, '0')}`;
 
         takeawayList.push({
@@ -238,8 +239,8 @@ export function CashierPage() {
       // C) Sync from live-qrs endpoint for any active takeaway live QRs
       if (Array.isArray(liveQrsRes.data)) {
         for (const liveQr of liveQrsRes.data) {
-          if (liveQr.channel === 'TAKEAWAY') {
-            const alreadyInList = takeawayList.some((t) => t.code === liveQr.code || t.customerId === liveQr.customerId);
+          if (liveQr.channel === 'TAKEAWAY' && liveQr.status !== 'PAID_PREPARING' && liveQr.status !== 'DELIVERED') {
+            const alreadyInList = takeawayList.some((t) => (t.code && t.code === liveQr.code) || (t.customerId && t.customerId === liveQr.customerId));
             if (!alreadyInList) {
               const itemsSummary = (liveQr.items || []).map((it: any) => ({
                 name: it.name || productMap[it.productId]?.name || 'Plato Retiro',
@@ -262,16 +263,22 @@ export function CashierPage() {
         }
       }
 
-      // D) LocalStorage fallback if current browser has an active local pre-order of type TAKEAWAY
+      // D) LocalStorage fallback
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith('restaurant_os_customer_state_')) {
               const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-              if (parsed.activePreOrder && parsed.activePreOrder.type === 'TAKEAWAY') {
+              if (
+                parsed.activePreOrder &&
+                parsed.activePreOrder.type === 'TAKEAWAY' &&
+                parsed.activePreOrder.status !== 'PAID_PREPARING' &&
+                parsed.activePreOrder.status !== 'DELIVERED'
+              ) {
                 const code = parsed.activePreOrder.code;
-                if (!takeawayList.some((t) => t.code === code)) {
+                const existing = takeawayList.find((t) => t.code === code || (parsed.activePreOrder.orderId && t.orderId === parsed.activePreOrder.orderId));
+                if (!existing) {
                   const cartItems = (parsed.cart || []).map((c: any) => ({
                     name: c.product?.name || 'Plato Retiro',
                     quantity: c.quantity || 1,
@@ -279,14 +286,19 @@ export function CashierPage() {
                   }));
                   takeawayList.push({
                     id: `local-${code}`,
+                    orderId: parsed.activePreOrder.orderId,
+                    preOrderId: parsed.activePreOrder.preOrderId,
                     code,
-                    customerName: parsed.customerName || 'Cliente Local #L-45',
+                    customerName: parsed.customerName || `Cliente Local ${code}`,
                     totalAmount: parsed.activePreOrder.totalAmount || 14200,
                     isPaid: false,
                     status: 'PRE_ORDEN',
-                    items: cartItems.length > 0 ? cartItems : [{ name: 'Comanda Retiro #L-45', quantity: 1, unitPrice: parsed.activePreOrder.totalAmount || 14200 }],
+                    items: cartItems.length > 0 ? cartItems : [{ name: `Comanda Retiro ${code}`, quantity: 1, unitPrice: parsed.activePreOrder.totalAmount || 14200 }],
                     createdAt: new Date().toISOString(),
                   });
+                } else {
+                  if (parsed.activePreOrder.orderId && !existing.orderId) existing.orderId = parsed.activePreOrder.orderId;
+                  if (parsed.activePreOrder.preOrderId && !existing.preOrderId) existing.preOrderId = parsed.activePreOrder.preOrderId;
                 }
               }
             }
@@ -299,7 +311,7 @@ export function CashierPage() {
       // Strictly enforce 1 CLIENT = 1 UNIQUE TICKET in Cashier
       const uniqueTakeawayMap = new Map<string, TakeawayOrderCard>();
       for (const tk of takeawayList) {
-        const key = tk.customerId || tk.code;
+        const key = tk.code || tk.customerId || tk.orderId || tk.preOrderId || tk.id;
         if (!uniqueTakeawayMap.has(key)) {
           uniqueTakeawayMap.set(key, tk);
         }
@@ -325,24 +337,23 @@ export function CashierPage() {
   // Real-time SSE & snapshot on reconnect
   useSse({
     token: authToken,
-    eventTypes: [
-      'TABLE_ASSIGNED',
-      'TABLE_RELEASED',
-      'ORDER_CONFIRMED',
-      'ORDER_SENT_TO_KITCHEN',
-      'ORDER_DELIVERED',
-      'SERVICE_TASK_CREATED',
-      'SERVICE_TASK_COMPLETED',
-      'ACCOUNT_REQUESTED',
-      'PAYMENT_REGISTERED',
-      'ACCOUNT_CLOSED',
-      'TABLE_CLOSED',
-    ],
-    onEvent: () => {
-      fetchAccounts();
-    },
-    onReconnect: () => {
-      fetchAccounts();
+    restaurantId,
+    onReconnect: () => fetchAccounts(),
+    onEvent: (event) => {
+      if (
+        event.type === 'ACCOUNT_CREATED' ||
+        event.type === 'ACCOUNT_UPDATED' ||
+        event.type === 'ACCOUNT_CLOSED' ||
+        event.type === 'PAYMENT_REGISTERED' ||
+        event.type === 'TABLE_RELEASED' ||
+        event.type === 'ORDER_CREATED' ||
+        event.type === 'ORDER_CONFIRMED' ||
+        event.type === 'ORDER_SENT_TO_KITCHEN' ||
+        event.type === 'PREORDER_CREATED' ||
+        event.type === 'PREORDER_UPDATED'
+      ) {
+        fetchAccounts();
+      }
     },
   });
 
@@ -359,104 +370,52 @@ export function CashierPage() {
     setPaymentAmount(tk.totalAmount);
   };
 
-  // 1. Salón: Cobrar y Liberar Mesa (Directo y Automático)
-  const handleRecordPayment = async (e: React.FormEvent) => {
+  // 1. Cobro de Mesa de Salón
+  const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAccount || paymentAmount <= 0) return;
-
+    if (!selectedAccount) return;
     setMsg(null);
-    let targetAccId = selectedAccount.realAccountId;
 
-    // If account record does not exist in DB yet, create it and attach session orders
-    if (!targetAccId) {
-      const createdAcc = await request<any>('/api/billing/accounts', {
-        method: 'POST',
-        body: JSON.stringify({
-          restaurantId,
-          tableSessionId: selectedAccount.tableSessionId,
-        }),
-      });
+    const pending = Math.max(0, selectedAccount.totalAmount - selectedAccount.paidAmount);
+    const amountToPay = paymentAmount > 0 ? paymentAmount : pending;
 
-      if (createdAcc.data) {
-        targetAccId = createdAcc.data.id;
-        const ordersRes = await request<any[]>(`/api/orders?restaurantId=${restaurantId}`);
-        const sessionTableOrders = (ordersRes.data || []).filter(
-          (o) => o.tableSessionId === selectedAccount.tableSessionId && o.status !== 'CANCELLED',
-        );
-        for (const ord of sessionTableOrders) {
-          await request(`/api/billing/accounts/${targetAccId}/orders`, {
-            method: 'POST',
-            body: JSON.stringify({ orderId: ord.id }),
-          });
-        }
-      }
-    }
-
-    if (!targetAccId) {
-      setMsg({ type: 'error', text: 'Error al inicializar la cuenta de cobro' });
-      return;
-    }
-
-    // Register payment
-    const res = await request(`/api/billing/accounts/${targetAccId}/payments`, {
+    const res = await request<any>(`/api/billing/accounts/${selectedAccount.id}/payments`, {
       method: 'POST',
       body: JSON.stringify({
-        amount: Number(paymentAmount),
+        amount: amountToPay,
         method: paymentMethod,
       }),
     });
 
-    if (res.error) {
-      setMsg({ type: 'error', text: res.error });
-      return;
-    }
-
-    const pendingAfter = Math.max(0, selectedAccount.balance - paymentAmount);
-
-    // If 100% paid, automatically close account and free table in 1 atomic action!
-    if (pendingAfter === 0) {
-      await request(`/api/billing/accounts/${targetAccId}/close`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-
-      await request(`/api/table-sessions/${selectedAccount.tableSessionId}/close`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-
+    if (res.data) {
       setMsg({
         type: 'success',
-        text: `💵 ¡Mesa ${selectedAccount.tableNumber} cobrada ($${paymentAmount.toLocaleString()}) y liberada exitosamente en todo el restaurante!`,
+        text: `✅ Cobro de $${amountToPay.toLocaleString()} registrado con ${paymentMethod}`,
       });
-      setSelectedAccount(null);
+      setPaymentAmount(0);
+      fetchAccounts();
     } else {
-      setMsg({
-        type: 'success',
-        text: `💵 Pago parcial de $${paymentAmount.toLocaleString()} registrado. Saldo restante: $${pendingAfter.toLocaleString()}`,
-      });
+      setMsg({ type: 'error', text: res.error || 'Error al registrar cobro' });
     }
-
-    fetchAccounts();
   };
 
-  // 2. Salón: Liberar Manualmente si ya estaba saldada
-  const handleCloseAccount = async (tableSessionId: string, realAccountId?: string | null) => {
+  // 2. Liberación atómica de Mesa de Salón
+  const handleReleaseTable = async (accountId: string, tableId: string) => {
     setMsg(null);
-    if (realAccountId) {
-      await request(`/api/billing/accounts/${realAccountId}/close`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-    }
-
-    const res = await request(`/api/table-sessions/${tableSessionId}/close`, {
+    const res = await request<any>(`/api/tables/${tableId}/release`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        accountId,
+        actorType: 'STAFF',
+        actorId,
+      }),
     });
 
-    if (res.data || res.status === 200) {
-      setMsg({ type: 'success', text: '🔒 Mesa liberada y cuenta cerrada con éxito.' });
+    if (res.data) {
+      setMsg({
+        type: 'success',
+        text: `🟢 Mesa liberada con éxito y cuenta archivada en caja.`,
+      });
       setSelectedAccount(null);
       fetchAccounts();
     } else {
@@ -470,31 +429,60 @@ export function CashierPage() {
     try {
       let targetOrderId = tk.orderId;
 
-      // 1. Confirm the pre-order if it was a pre-order
+      // 1. If formal order does not exist, create it in DB
+      if (!targetOrderId) {
+        const createRes = await request<any>('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            restaurantId,
+            customerId: tk.customerId || actorId,
+            preOrderId: tk.preOrderId || undefined,
+            type: 'TAKEAWAY',
+            items: tk.items.map((it) => {
+              const matched = products.find((p) => p.name.toLowerCase() === it.name.toLowerCase());
+              return {
+                productId: matched?.id || (it as any).productId || '00000000-0000-0000-0000-000000000001',
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+              };
+            }),
+          }),
+        });
+
+        if (createRes.data?.id) {
+          targetOrderId = createRes.data.id;
+        }
+      }
+
+      // 2. Dispatch to kitchen with payment triggered (creates KitchenOrder in DB and triggers KDS!)
+      if (targetOrderId) {
+        const sendRes = await request(`/api/orders/${targetOrderId}/send-to-kitchen`, {
+          method: 'POST',
+          body: JSON.stringify({
+            isPaymentTriggered: true,
+          }),
+        });
+
+        if (sendRes.error) {
+          throw new Error(sendRes.error);
+        }
+      }
+
+      // 3. Confirm the pre-order if it was linked
       if (tk.preOrderId) {
         await request(`/api/preorders/${tk.preOrderId}/confirm`, {
           method: 'PATCH',
         });
       }
 
-      // 2. Dispatch to kitchen if formal order exists
-      if (targetOrderId) {
-        await request(`/api/orders/${targetOrderId}/send-to-kitchen`, {
-          method: 'POST',
-          body: JSON.stringify({
-            isPaymentTriggered: true,
-          }),
-        });
-      }
-
-      // 3. Clean up any local storage tracking
+      // 4. Update local storage so mobile screen updates
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith('restaurant_os_customer_state_')) {
               const item = JSON.parse(localStorage.getItem(key) || '{}');
-              if (item.activePreOrder?.code === tk.code) {
+              if (item.activePreOrder?.code === tk.code || item.activePreOrder?.orderId === targetOrderId) {
                 item.activePreOrder.status = 'PAID_PREPARING';
                 localStorage.setItem(key, JSON.stringify(item));
               }
@@ -505,12 +493,16 @@ export function CashierPage() {
         }
       }
 
+      // 5. Remove immediately from UI state
+      setTakeawayOrders((prev) => prev.filter((t) => t.id !== tk.id && t.code !== tk.code));
+      setSelectedTakeaway(null);
+
       setMsg({
         type: 'success',
         text: `🛍️ ¡Pedido ${tk.code} cobrado ($${tk.totalAmount.toLocaleString()}) con ${paymentMethod} y despachado a Cocina KDS! Aparecerá en TV Barra Retiro cuando esté listo.`,
       });
-      setSelectedTakeaway(null);
-      fetchAccounts();
+
+      await fetchAccounts();
     } catch (err: any) {
       setMsg({ type: 'error', text: err.message || 'Error al despachar pedido a cocina' });
     }
@@ -857,7 +849,7 @@ export function CashierPage() {
 
           {/* Form for Salón Mesa Payment */}
           {selectedAccount && (
-            <form onSubmit={handleRecordPayment} className="space-y-4">
+            <form onSubmit={handleRegisterPayment} className="space-y-4">
               {/* Itemized summary */}
               {selectedAccount.items && selectedAccount.items.length > 0 && (
                 <div className="bg-surface-2 border border-white/5 rounded-md p-3 max-h-40 overflow-y-auto space-y-1.5 text-xs">
@@ -962,7 +954,7 @@ export function CashierPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => handleCloseAccount(selectedAccount.tableSessionId, selectedAccount.realAccountId)}
+                  onClick={() => handleReleaseTable(selectedAccount.realAccountId || selectedAccount.id, selectedAccount.tableId || '')}
                   className="w-full h-12 rounded-sm bg-emerald text-white hover:bg-emerald-muted font-bold text-xs flex items-center justify-center gap-2 transition shadow-glowEmerald cursor-pointer"
                 >
                   <Lock className="w-4 h-4" />

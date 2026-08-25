@@ -181,9 +181,12 @@ export function CustomerPage() {
     // Reuse existing code if same channel or generate a fresh one
     const generatedCode = activePreOrder?.type === channel ? activePreOrder.code : `${codePrefix}-${Math.floor(10 + Math.random() * 89)}`;
 
+    let createdOrderId: string | undefined = (activePreOrder as any)?.orderId;
+    let createdPreOrderId: string | undefined = (activePreOrder as any)?.preOrderId;
+
     try {
       // 1. Post Pre-Order to DB
-      await request('/api/preorders', {
+      const preRes = await request<any>('/api/preorders', {
         method: 'POST',
         body: JSON.stringify({
           restaurantId,
@@ -194,14 +197,18 @@ export function CustomerPage() {
           })),
         }),
       });
+      if (preRes.data?.id) {
+        createdPreOrderId = preRes.data.id;
+      }
 
       // 2. If Takeaway or Delivery, also create the Order so TV Barra and Caja receive it immediately
       if (channel === 'TAKEAWAY' || channel === 'DELIVERY') {
-        await request('/api/orders', {
+        const orderRes = await request<any>('/api/orders', {
           method: 'POST',
           body: JSON.stringify({
             restaurantId,
             customerId: actorId,
+            preOrderId: createdPreOrderId,
             type: channel,
             items: cart.map((c) => ({
               productId: c.product.id,
@@ -210,6 +217,9 @@ export function CustomerPage() {
             })),
           }),
         });
+        if (orderRes.data?.id) {
+          createdOrderId = orderRes.data.id;
+        }
       }
     } catch {
       // Offline fallback
@@ -218,6 +228,8 @@ export function CustomerPage() {
     }
 
     const preOrderObj = {
+      orderId: createdOrderId,
+      preOrderId: createdPreOrderId,
       code: generatedCode,
       type: channel,
       status: 'ACTIVO',

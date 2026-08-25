@@ -71,7 +71,12 @@ export async function orderRoutes(app: FastifyInstance, opts: OrderRoutesOptions
     '/',
     {
       preHandler: [
-        requireAnyPermission(Permission.ORDERS_CREATE, Permission.PREORDERS_CREATE),
+        requireAnyPermission(
+          Permission.ORDERS_CREATE,
+          Permission.PREORDERS_CREATE,
+          Permission.PAYMENTS_REGISTER,
+          Permission.ACCOUNTS_CLOSE,
+        ),
         validateRestaurantAccess(),
       ],
     },

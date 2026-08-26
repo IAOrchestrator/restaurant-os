@@ -131,7 +131,7 @@ export async function preOrderRoutes(app: FastifyInstance, opts: PreOrderRoutesO
     '/:id/confirm',
     {
       preHandler: [
-        requirePermission(Permission.PREORDERS_UPDATE),
+        requireAnyPermission(Permission.PREORDERS_UPDATE, Permission.ORDERS_CREATE, Permission.PAYMENTS_REGISTER, Permission.ACCOUNTS_CLOSE),
         requireResourceAccess('preorder'),
       ],
     },

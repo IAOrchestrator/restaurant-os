@@ -20,6 +20,9 @@ export class OperationalResourceScoper implements ResourceScoper {
       if (resourceType === 'customer') {
         return ResourceScope.own([actor.id]);
       }
+      if (resourceType === 'preorder' || resourceType === 'catalog' || resourceType === 'review') {
+        return ResourceScope.restaurant();
+      }
       if (this.getCustomerSessionIds) {
         const sessionIds = await this.getCustomerSessionIds(actor.id);
         return ResourceScope.own(sessionIds);

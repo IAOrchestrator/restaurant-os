@@ -295,11 +295,16 @@ export function KitchenPage() {
     }
   };
 
+  // Active tickets exclude COMPLETED and CANCELLED
+  const activeTickets = useMemo(() => {
+    return tickets.filter((t) => t.status !== 'COMPLETED');
+  }, [tickets]);
+
   // Filter tickets by selected sector
   const filteredTickets = useMemo(() => {
-    if (selectedSector === 'TODOS') return tickets;
-    return tickets.filter((t) => t.sector.toUpperCase() === selectedSector.toUpperCase());
-  }, [tickets, selectedSector]);
+    if (selectedSector === 'TODOS') return activeTickets;
+    return activeTickets.filter((t) => t.sector.toUpperCase() === selectedSector.toUpperCase());
+  }, [activeTickets, selectedSector]);
 
   // Batching aggregation across all active tickets in view (RECEIVED, STARTED, NEARLY_READY)
   const activeBatches = useMemo(() => {
@@ -377,7 +382,7 @@ export function KitchenPage() {
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4">
         {sectorList.map((sec) => {
           const cfg = SECTOR_CONFIG[sec] || { label: sec, icon: '🏷️', color: 'text-text-primary', bg: 'bg-white/10' };
-          const count = sec === 'TODOS' ? tickets.length : tickets.filter((t) => t.sector.toUpperCase() === sec).length;
+          const count = sec === 'TODOS' ? activeTickets.length : activeTickets.filter((t) => t.sector.toUpperCase() === sec).length;
           const isSelected = selectedSector === sec;
 
           return (

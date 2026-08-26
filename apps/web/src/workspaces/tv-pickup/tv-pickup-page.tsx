@@ -50,20 +50,14 @@ export function TvPickupPage() {
   const fetchTakeawayOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, kitchenRes, productsRes, customersRes] = await Promise.all([
+      const [ordersRes, kitchenRes, productsRes] = await Promise.all([
         request<any[]>(`/api/orders?restaurantId=${restaurantId}`),
         request<any[]>(`/api/kitchen/orders?restaurantId=${restaurantId}`),
         request<any[]>(`/api/catalog/products?restaurantId=${restaurantId}`),
-        request<any[]>(`/api/customers?restaurantId=${restaurantId}`),
       ]);
 
       const productMap = (productsRes.data || []).reduce<Record<string, string>>((acc, p) => {
         acc[p.id] = p.name;
-        return acc;
-      }, {});
-
-      const customerMap = (customersRes.data || []).reduce<Record<string, string>>((acc, c) => {
-        acc[c.id] = c.name;
         return acc;
       }, {});
 
@@ -111,7 +105,7 @@ export function TvPickupPage() {
             combined.push({
               id: o.id,
               code,
-              customerName: customerMap[o.customerId] || 'Cliente Retiro',
+              customerName: 'Cliente Retiro',
               status: effectiveStatus,
               isPaid: o.isPaid ?? true,
               totalAmount: o.totalAmount || 0,
